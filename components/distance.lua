@@ -4,22 +4,6 @@ local TEX_WIDTH = 256
 local TEX_HEIGHT = 32
 local CELL_WIDTH = 20
 local CELL_HEIGHT = 32
-local OUTLINE_OFFSETS = {
-  { -1,  0 },
-  {  1,  0 },
-  {  0, -1 },
-  {  0,  1 },
-  { -1, -1 },
-  { -1,  1 },
-  {  1, -1 },
-  {  1,  1 },
-}
-
-local function SetDigitTexture(control, left, right, width, height, x, y)
-  control:SetTextureCoords(left, right, 0, 1)
-  control:Set3DLocalDimensions(width, height)
-  control:Set3DRenderSpaceOrigin(x, y, 0)
-end
 
 -- dont look at this
 local function SetMetres(metres, distance, data)
@@ -39,9 +23,6 @@ local function SetMetres(metres, distance, data)
   local nCellWidth = (1/TEX_WIDTH) * CELL_WIDTH
   local nCellWidth2 = (1/TEX_HEIGHT) * CELL_WIDTH
   local nCellHeight = (1/TEX_HEIGHT) * CELL_HEIGHT
-  local outlineOffset = nSize * data.distanceOutlineThickness
-  local width = nCellWidth2 * nSize
-  local height = nCellHeight * nSize
   local number, left, right, pos
 
   for i = 1, data.distanceDigits do
@@ -50,25 +31,13 @@ local function SetMetres(metres, distance, data)
     -- Only width is needed currently for getting a cell rect
     left = nCellWidth * number
     right = nCellWidth * (number + 1)
+    distance.metres[i]:SetTextureCoords(left, right, 0, 1)
+
+    -- uses height for first parameter thus nCellWidth2...
+    distance.metres[i]:Set3DLocalDimensions(nCellWidth2*nSize, nCellHeight*nSize)
 
     pos = (i*nCellWidth2) - ((nCellWidth2*(numDigits+1)) * 0.5)
-
-    if distance.metresOutline and distance.metresOutline[i] then
-      for outlineIndex = 1, #OUTLINE_OFFSETS do
-        local offset = OUTLINE_OFFSETS[outlineIndex]
-        SetDigitTexture(
-          distance.metresOutline[i][outlineIndex],
-          left,
-          right,
-          width,
-          height,
-          (pos * nSize) + (offset[1] * outlineOffset),
-          offset[2] * outlineOffset
-        )
-      end
-    end
-
-    SetDigitTexture(distance.metres[i], left, right, width, height, pos * nSize, 0)
+    distance.metres[i]:Set3DRenderSpaceOrigin(pos*nSize, 0, 0)
   end
 end
 
@@ -91,8 +60,6 @@ function L3DA:CreateDistance(parent, data)
   data.distanceDigits = data.distanceDigits or 4
   data.distanceScale = data.distanceScale or 25
   data.distanceColour = data.distanceColour or "FFFFFF"
-  data.distanceOutlineColour = data.distanceOutlineColour or "000000"
-  data.distanceOutlineThickness = data.distanceOutlineThickness or 0.06
   data.distanceMagnitude = data.distanceMagnitude or 5
   data.distanceHeight = data.distanceHeight or 1.5
 
@@ -103,21 +70,8 @@ function L3DA:CreateDistance(parent, data)
 
   -- create max digits texture controls
   distance.metres = {}
-  distance.metresOutline = {}
 
   for i = 1, data.distanceDigits do
-    distance.metresOutline[i] = {}
-
-    for outlineIndex = 1, #OUTLINE_OFFSETS do
-      local outline = WINDOW_MANAGER:CreateControl(nil, distance, CT_TEXTURE)
-      distance.metresOutline[i][outlineIndex] = outline
-      outline:Create3DRenderSpace()
-      local outlineColour = ZO_ColorDef:New(data.distanceOutlineColour)
-      outline:SetColor(outlineColour.r, outlineColour.g, outlineColour.b, outlineColour.a)
-      outline:SetTexture("Lib3DArrow/art/font.dds")
-      outline:Set3DRenderSpaceUsesDepthBuffer(data.depthBuffer)
-    end
-
     distance.metres[i] = WINDOW_MANAGER:CreateControl(nil, distance, CT_TEXTURE)
     local metres = distance.metres[i]
     metres:Create3DRenderSpace()
