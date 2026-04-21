@@ -19,12 +19,16 @@ local LORE_LIBRARY_SHALIDOR = 1
 
 local SOURCE_COLOURS = {
   [SOURCE_SKYSHARDS] = { r = 0.529, g = 0.808, b = 0.922, a = 1 },
-  [SOURCE_LOREBOOKS] = { r = 0.627, g = 0.125, b = 0.941, a = 1 },
+  [SOURCE_LOREBOOKS] = { r = 0.788, g = 0.651, b = 0.275, a = 1 },
 }
 
-local LEGACY_SOURCE_COLOURS = {
-  [SOURCE_SKYSHARDS] = { r = 0.247, g = 0.565, b = 0.573, a = 1 },
-  [SOURCE_LOREBOOKS] = { r = 0.788, g = 0.651, b = 0.275, a = 1 },
+local MIGRATION_SOURCE_COLOURS = {
+  [SOURCE_SKYSHARDS] = {
+    { r = 0.247, g = 0.565, b = 0.573, a = 1 },
+  },
+  [SOURCE_LOREBOOKS] = {
+    { r = 0.627, g = 0.125, b = 0.941, a = 1 },
+  },
 }
 
 local defaults = {
@@ -87,8 +91,16 @@ local function EnsureSettingsDefaults()
     local savedColour = settings.sourceColours[source]
     if savedColour.r == nil or savedColour.g == nil or savedColour.b == nil or savedColour.a == nil then
       CopyColour(savedColour, colour)
-    elseif IsSameColour(savedColour, LEGACY_SOURCE_COLOURS[source]) then
-      CopyColour(savedColour, colour)
+    else
+      local migrationColours = MIGRATION_SOURCE_COLOURS[source]
+      if migrationColours then
+        for _, migrationColour in ipairs(migrationColours) do
+          if IsSameColour(savedColour, migrationColour) then
+            CopyColour(savedColour, colour)
+            break
+          end
+        end
+      end
     end
   end
 end
