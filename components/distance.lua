@@ -36,16 +36,21 @@ end
 
 local function ApplyDistanceStyle(distance, data)
   local pixelWidth, pixelHeight = GetDistancePixelDimensions(data)
-  local worldWidth, worldHeight = GetDistanceWorldDimensions(data)
 
   distance:SetDimensions(pixelWidth, pixelHeight)
-  distance:Set3DLocalDimensions(worldWidth, worldHeight)
-  distance:Set3DRenderSpaceUsesDepthBuffer(data.depthBuffer)
+  if distance.Set3DLocalDimensions then
+    local worldWidth, worldHeight = GetDistanceWorldDimensions(data)
+    distance:Set3DLocalDimensions(worldWidth, worldHeight)
+  end
+  if distance.Set3DRenderSpaceUsesDepthBuffer then
+    distance:Set3DRenderSpaceUsesDepthBuffer(data.depthBuffer)
+  end
 
   if distance.label then
     local c = ZO_ColorDef:New(data.distanceColour)
     distance.label:ClearAnchors()
     distance.label:SetAnchorFill(distance)
+    distance.label:SetDimensions(pixelWidth, pixelHeight)
     distance.label:SetFont(GetDistanceFontString(data))
     distance.label:SetHorizontalAlignment(TEXT_ALIGN_CENTER)
     distance.label:SetVerticalAlignment(TEXT_ALIGN_CENTER)
