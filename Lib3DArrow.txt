@@ -1,0 +1,15 @@
+## Title: Lib3DArrow
+## Author: Main Author: kadeer; Modernization Changes and Additional Addon Support: |cA020F0Zero|r
+## Description: Displays 3D arrows
+## APIVersion: 101047 101048
+## AddOnVersion: 1
+## IsLibrary: true
+## DependsOn: LibGPS
+## OptionalDependsOn: SkyShards LoreBooks LibAddonMenu-2.0
+## SavedVariables: Lib3DArrow_SavedVariables
+
+components\arrow.lua
+components\distance.lua
+components\marker.lua
+Lib3DArrow.lua
+integration.lua
