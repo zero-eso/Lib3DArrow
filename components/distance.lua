@@ -1,83 +1,105 @@
 L3DA = L3DA or {}
 
-local TEX_WIDTH = 256
-local TEX_HEIGHT = 32
-local CELL_WIDTH = 20
-local CELL_HEIGHT = 32
+local BASE_DIGIT_WIDTH = 20
+local BASE_LABEL_HEIGHT = 32
+local LABEL_SIDE_PADDING = 12
+local BASE_FONT_SIZE = 26
 
--- dont look at this
-local function SetMetres(metres, distance, data)
-  -- skip if its the same
-  data.prevMetres = data.prevMetres or 0
-  if data.prevMetres == metres then return end
-  data.prevMetres = metres
+local function ClampMetres(metres, data)
+  local maxMetres = math.pow(10, data.distanceDigits) - 1
+  metres = metres < maxMetres and metres or maxMetres
+  return metres > 0 and metres or 0
+end
 
-  -- set numbers (texturecoord and texture dimension)
-  metres = metres < math.pow(10, data.distanceDigits) and metres or math.pow(10, data.distanceDigits)-1
-  metres = metres > 0 and metres or 0
+local function GetPixelScale(data)
+  return data.distanceScale / 25
+end
 
-  local str = tostring(math.floor(metres))
-  local numDigits = #str
+local function GetDistancePixelDimensions(data)
+  local pixelScale = GetPixelScale(data)
+  local width = zo_floor((((BASE_DIGIT_WIDTH * data.distanceDigits) + LABEL_SIDE_PADDING) * pixelScale) + 0.5)
+  local height = zo_floor((BASE_LABEL_HEIGHT * pixelScale) + 0.5)
+  return zo_max(1, width), zo_max(1, height)
+end
 
-  local nSize = data.distanceScale / 100
-  local nCellWidth = (1/TEX_WIDTH) * CELL_WIDTH
-  local nCellWidth2 = (1/TEX_HEIGHT) * CELL_WIDTH
-  local nCellHeight = (1/TEX_HEIGHT) * CELL_HEIGHT
-  local number, left, right, pos
+local function GetDistanceWorldDimensions(data)
+  local worldScale = data.distanceScale / 100
+  local width = (((BASE_DIGIT_WIDTH * data.distanceDigits) + LABEL_SIDE_PADDING) / BASE_LABEL_HEIGHT) * worldScale
+  local height = worldScale
+  return width, height
+end
 
-  for i = 1, data.distanceDigits do
-    number = tonumber(string.sub(str, i, i)) or 123 -- grab a non existant cell (so it will show as empty)
+local function GetDistanceFontString(data)
+  local fontSize = data.distanceFontSize or zo_max(12, zo_floor((BASE_FONT_SIZE * GetPixelScale(data)) + 0.5))
+  return string.format("%s|%d|%s", data.distanceFontFace, fontSize, data.distanceFontEffect)
+end
 
-    -- Only width is needed currently for getting a cell rect
-    left = nCellWidth * number
-    right = nCellWidth * (number + 1)
-    distance.metres[i]:SetTextureCoords(left, right, 0, 1)
+local function ApplyDistanceStyle(distance, data)
+  local pixelWidth, pixelHeight = GetDistancePixelDimensions(data)
+  local worldWidth, worldHeight = GetDistanceWorldDimensions(data)
 
-    -- uses height for first parameter thus nCellWidth2...
-    distance.metres[i]:Set3DLocalDimensions(nCellWidth2*nSize, nCellHeight*nSize)
+  distance:SetDimensions(pixelWidth, pixelHeight)
+  distance:Set3DLocalDimensions(worldWidth, worldHeight)
+  distance:Set3DRenderSpaceUsesDepthBuffer(data.depthBuffer)
 
-    pos = (i*nCellWidth2) - ((nCellWidth2*(numDigits+1)) * 0.5)
-    distance.metres[i]:Set3DRenderSpaceOrigin(pos*nSize, 0, 0)
+  if distance.label then
+    local c = ZO_ColorDef:New(data.distanceColour)
+    distance.label:ClearAnchors()
+    distance.label:SetAnchorFill(distance)
+    distance.label:SetFont(GetDistanceFontString(data))
+    distance.label:SetHorizontalAlignment(TEXT_ALIGN_CENTER)
+    distance.label:SetVerticalAlignment(TEXT_ALIGN_CENTER)
+    distance.label:SetColor(c.r, c.g, c.b, c.a)
+    distance.label:SetPixelRoundingEnabled(false)
   end
 end
 
+local function SetMetres(metres, distance, data)
+  metres = ClampMetres(metres, data)
+
+  data.prevMetres = data.prevMetres or -1
+  if data.prevMetres == metres then
+    return
+  end
+
+  data.prevMetres = metres
+  distance.label:SetText(tostring(zo_floor(metres)))
+end
+
 function L3DA:UpdateDistance(parent, data, pData)
-  -- 2: Distance Label
-  -- align our distance 3d control with the camera's render space so the its always facing the camera
-  -- use same position as arrow but 0.5 higher
-  local circ = math.atan2(pData.playerY-data.targetY, data.targetX-pData.playerX) + (90 * math.pi / 180)
+  -- align the distance control with the camera so the label stays billboarded
+  local circ = math.atan2(pData.playerY - data.targetY, data.targetX - pData.playerX) + (90 * math.pi / 180)
 
   parent.distance:Set3DRenderSpaceForward(pData.forwardX, pData.forwardY, pData.forwardZ)
   parent.distance:Set3DRenderSpaceRight(pData.rightX, pData.rightY, pData.rightZ)
   parent.distance:Set3DRenderSpaceUp(pData.upX, pData.upY, pData.upZ)
-  parent.distance:Set3DRenderSpaceOrigin(pData.worldX + (data.distanceMagnitude * math.sin(circ)), pData.worldY + data.distanceHeight + 0.5, pData.worldZ + (data.distanceMagnitude * math.cos(circ)))
+  parent.distance:Set3DRenderSpaceOrigin(
+    pData.worldX + (data.distanceMagnitude * math.sin(circ)),
+    pData.worldY + data.distanceHeight + 0.5,
+    pData.worldZ + (data.distanceMagnitude * math.cos(circ))
+  )
 
   SetMetres(data.metres, parent.distance, data)
 end
 
 function L3DA:CreateDistance(parent, data)
-  -- distance label settings/defaults
   data.distanceDigits = data.distanceDigits or 4
   data.distanceScale = data.distanceScale or 25
   data.distanceColour = data.distanceColour or "FFFFFF"
   data.distanceMagnitude = data.distanceMagnitude or 5
   data.distanceHeight = data.distanceHeight or 1.5
+  data.distanceFontFace = data.distanceFontFace or "$(BOLD_FONT)"
+  data.distanceFontEffect = data.distanceFontEffect or "thick-outline"
 
-  -- Distance label
   parent.distance = WINDOW_MANAGER:CreateControl(nil, parent, CT_CONTROL)
   local distance = parent.distance
   distance:Create3DRenderSpace()
+  distance:SetMouseEnabled(false)
 
-  -- create max digits texture controls
-  distance.metres = {}
+  distance.label = WINDOW_MANAGER:CreateControl(nil, distance, CT_LABEL)
+  local label = distance.label
+  label:SetMouseEnabled(false)
+  label:SetText("")
 
-  for i = 1, data.distanceDigits do
-    distance.metres[i] = WINDOW_MANAGER:CreateControl(nil, distance, CT_TEXTURE)
-    local metres = distance.metres[i]
-    metres:Create3DRenderSpace()
-    local c = ZO_ColorDef:New(data.distanceColour)
-    metres:SetColor(c.r, c.g, c.b, c.a)
-    metres:SetTexture("Lib3DArrow/art/font.dds")
-    metres:Set3DRenderSpaceUsesDepthBuffer(data.depthBuffer)
-  end
+  ApplyDistanceStyle(distance, data)
 end

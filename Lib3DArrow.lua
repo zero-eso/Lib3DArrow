@@ -263,7 +263,10 @@ function lib:CreateArrow(data)
         self.marker.pillar:SetAlpha(0.5)
       end
 
-      if self.distance and self.distance.metres then
+      if self.distance and self.distance.label then
+        c = GetColorDef(markerColour)
+        self.distance.label:SetColor(c.r, c.g, c.b, c.a)
+      elseif self.distance and self.distance.metres then
         c = GetColorDef(markerColour)
         for i = 1, #self.distance.metres do
           self.distance.metres[i]:SetColor(c.r, c.g, c.b, c.a)
