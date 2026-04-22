@@ -36,6 +36,7 @@ local defaults = {
     enabled = false,
     trackSkyShards = true,
     trackLoreBooks = true,
+    useFaux3DArrow = false,
     respectSourceSettings = true,
     showDistance = true,
     showMarker = true,
@@ -130,10 +131,12 @@ local function EnsureTrackerArrow()
     return integration.arrow
   end
 
+  local settings = GetSettings()
   integration.arrow = lib:CreateArrow({
     arrowColour = GetSourceColour(SOURCE_SKYSHARDS),
     markerColour = GetSourceColour(SOURCE_SKYSHARDS),
     distanceColour = GetSourceColour(SOURCE_SKYSHARDS),
+    arrowUseFaux3D = settings and settings.useFaux3DArrow or false,
   })
 
   return integration.arrow
@@ -160,6 +163,7 @@ local function ApplyVisualSettings()
 
   local arrow = EnsureTrackerArrow()
 
+  arrow:SetArrowFaux3DEnabled(settings.useFaux3DArrow)
   arrow.distance:SetHidden(not settings.showDistance)
   arrow.marker:SetHidden(not settings.showMarker)
 end
@@ -626,6 +630,20 @@ local function InitializeSettingsPanel()
       end,
       default = defaults.tracker.showMarker,
       width = "half",
+    },
+    {
+      type = "checkbox",
+      name = "Use Faux 3D Arrow",
+      tooltip = "Builds a chunkier 2.5D arrow from the same arrow art while keeping the default flat mode available.",
+      getFunc = function()
+        return settings.useFaux3DArrow
+      end,
+      setFunc = function(value)
+        settings.useFaux3DArrow = value
+        ApplyVisualSettings()
+      end,
+      default = defaults.tracker.useFaux3DArrow,
+      width = "full",
     },
     {
       type = "slider",
