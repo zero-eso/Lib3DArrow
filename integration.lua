@@ -43,6 +43,10 @@ local defaults = {
     respectSourceSettings = true,
     showDistance = true,
     showMarker = true,
+    hideArrowNearTarget = false,
+    hideArrowNearTargetDistance = 10,
+    hideMarkerNearTarget = false,
+    hideMarkerNearTargetDistance = 10,
     scanIntervalMs = 250,
     sourceColours = {
       [SOURCE_ACTIVE_QUEST] = {
@@ -173,6 +177,27 @@ local function HideTrackerArrow()
 
   integration.currentTargetKey = nil
   integration.currentSource = nil
+  integration.currentDistance = nil
+end
+
+local function ShouldHideArrowNearTarget()
+  local settings = GetSettings()
+  if not settings or not settings.hideArrowNearTarget then
+    return false
+  end
+
+  return integration.currentDistance ~= nil
+    and integration.currentDistance <= settings.hideArrowNearTargetDistance
+end
+
+local function ShouldHideMarkerNearTarget()
+  local settings = GetSettings()
+  if not settings or not settings.hideMarkerNearTarget then
+    return false
+  end
+
+  return integration.currentDistance ~= nil
+    and integration.currentDistance <= settings.hideMarkerNearTargetDistance
 end
 
 local function ApplyVisualSettings()
@@ -186,10 +211,13 @@ local function ApplyVisualSettings()
   end
 
   local arrow = EnsureTrackerArrow()
+  local hideArrow = ShouldHideArrowNearTarget()
+  local hideMarker = ShouldHideMarkerNearTarget()
 
   arrow:SetArrowFaux3DEnabled(settings.useFaux3DArrow)
+  arrow.arrow:SetHidden(hideArrow)
   arrow.distance:SetHidden(not settings.showDistance)
-  arrow.marker:SetHidden(not settings.showMarker)
+  arrow.marker:SetHidden(not settings.showMarker or hideMarker)
 end
 
 local function ApplySourceColour(source)
@@ -620,6 +648,7 @@ function integration:RefreshTarget()
     integration.currentSource = candidate.source
   end
 
+  integration.currentDistance = candidate.distance
   integration.currentTargetKey = candidate.key
   arrow:SetTarget(candidate.x, candidate.y)
   ApplyVisualSettings()
@@ -795,6 +824,74 @@ local function InitializeSettingsPanel()
       end,
       default = defaults.tracker.showMarker,
       width = "half",
+    },
+    {
+      type = "checkbox",
+      name = "Hide Arrow Near Target",
+      tooltip = "Hides the large arrow when you are within the configured distance of the current target.",
+      getFunc = function()
+        return settings.hideArrowNearTarget
+      end,
+      setFunc = function(value)
+        settings.hideArrowNearTarget = value
+        ApplyVisualSettings()
+      end,
+      default = defaults.tracker.hideArrowNearTarget,
+      width = "full",
+    },
+    {
+      type = "slider",
+      name = "Hide Arrow Within Distance",
+      tooltip = "When the current target is at or below this distance in meters, the arrow is hidden.",
+      min = 1,
+      max = 100,
+      step = 1,
+      getFunc = function()
+        return settings.hideArrowNearTargetDistance
+      end,
+      setFunc = function(value)
+        settings.hideArrowNearTargetDistance = value
+        ApplyVisualSettings()
+      end,
+      default = defaults.tracker.hideArrowNearTargetDistance,
+      disabled = function()
+        return not settings.hideArrowNearTarget
+      end,
+      width = "full",
+    },
+    {
+      type = "checkbox",
+      name = "Hide Marker Near Target",
+      tooltip = "Hides the world marker when you are within the configured distance of the current target.",
+      getFunc = function()
+        return settings.hideMarkerNearTarget
+      end,
+      setFunc = function(value)
+        settings.hideMarkerNearTarget = value
+        ApplyVisualSettings()
+      end,
+      default = defaults.tracker.hideMarkerNearTarget,
+      width = "full",
+    },
+    {
+      type = "slider",
+      name = "Hide Marker Within Distance",
+      tooltip = "When the current target is at or below this distance in meters, the marker is hidden.",
+      min = 1,
+      max = 100,
+      step = 1,
+      getFunc = function()
+        return settings.hideMarkerNearTargetDistance
+      end,
+      setFunc = function(value)
+        settings.hideMarkerNearTargetDistance = value
+        ApplyVisualSettings()
+      end,
+      default = defaults.tracker.hideMarkerNearTargetDistance,
+      disabled = function()
+        return not settings.hideMarkerNearTarget
+      end,
+      width = "full",
     },
     {
       type = "checkbox",
