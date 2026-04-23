@@ -178,14 +178,22 @@ local function HideTrackerArrow()
   integration.currentDistance = nil
 end
 
+local function GetCurrentTargetDistance()
+  if integration.arrow and integration.arrow.data and integration.arrow.data.metres ~= nil then
+    return integration.arrow.data.metres
+  end
+
+  return integration.currentDistance
+end
+
 local function ShouldHideArrowNearTarget()
   local settings = GetSettings()
   if not settings or not settings.hideArrowNearTarget then
     return false
   end
 
-  return integration.currentDistance ~= nil
-    and integration.currentDistance <= settings.hideArrowNearTargetDistance
+  local distance = GetCurrentTargetDistance()
+  return distance ~= nil and distance <= settings.hideArrowNearTargetDistance
 end
 
 local function ShouldHideMarkerNearTarget()
@@ -194,8 +202,8 @@ local function ShouldHideMarkerNearTarget()
     return false
   end
 
-  return integration.currentDistance ~= nil
-    and integration.currentDistance <= settings.hideMarkerNearTargetDistance
+  local distance = GetCurrentTargetDistance()
+  return distance ~= nil and distance <= settings.hideMarkerNearTargetDistance
 end
 
 local function ApplyVisualSettings()
