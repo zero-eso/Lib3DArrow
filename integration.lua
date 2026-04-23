@@ -39,7 +39,6 @@ local defaults = {
     trackActiveQuest = true,
     trackSkyShards = true,
     trackLoreBooks = true,
-    useFaux3DArrow = false,
     respectSourceSettings = true,
     showDistance = true,
     showMarker = true,
@@ -164,7 +163,6 @@ local function EnsureTrackerArrow()
     arrowColour = GetSourceColour(SOURCE_SKYSHARDS),
     markerColour = GetSourceColour(SOURCE_SKYSHARDS),
     distanceColour = GetSourceColour(SOURCE_SKYSHARDS),
-    arrowUseFaux3D = settings and settings.useFaux3DArrow or false,
   })
 
   return integration.arrow
@@ -214,7 +212,6 @@ local function ApplyVisualSettings()
   local hideArrow = ShouldHideArrowNearTarget()
   local hideMarker = ShouldHideMarkerNearTarget()
 
-  arrow:SetArrowFaux3DEnabled(settings.useFaux3DArrow)
   arrow.arrow:SetHidden(hideArrow)
   arrow.distance:SetHidden(not settings.showDistance)
   arrow.marker:SetHidden(not settings.showMarker or hideMarker)
@@ -891,20 +888,6 @@ local function InitializeSettingsPanel()
       disabled = function()
         return not settings.hideMarkerNearTarget
       end,
-      width = "full",
-    },
-    {
-      type = "checkbox",
-      name = "Use Faux 3D Arrow",
-      tooltip = "Builds a chunkier 2.5D arrow from the same arrow art while keeping the default flat mode available.",
-      getFunc = function()
-        return settings.useFaux3DArrow
-      end,
-      setFunc = function(value)
-        settings.useFaux3DArrow = value
-        ApplyVisualSettings()
-      end,
-      default = defaults.tracker.useFaux3DArrow,
       width = "full",
     },
     {

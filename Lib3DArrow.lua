@@ -245,24 +245,17 @@ function lib:CreateArrow(data)
     return self.data.targetX, self.data.targetY
   end
 
-  function toplevel:SetArrowFaux3DEnabled(enabled)
-    self.data.arrowUseFaux3D = enabled == true
-    if self.arrow then
-      L3DA:RefreshArrowAppearance(self, self.data)
-    end
-  end
-
-  function toplevel:GetArrowFaux3DEnabled()
-    return self.data.arrowUseFaux3D == true
-  end
-
   function toplevel:ChangeColours(arrowColour, markerColour)
     local c
 
     if arrowColour then
       self.data.arrowColour = arrowColour
       if self.arrow then
-        L3DA:RefreshArrowAppearance(self, self.data)
+        c = GetColorDef(arrowColour)
+        self.arrow.chevron:SetColor(c.r, c.g, c.b, c.a)
+        if self.arrow.glow then
+          self.arrow.glow:SetColor(c.r, c.g, c.b, c.a)
+        end
       end
     end
 
