@@ -9,6 +9,7 @@ local TRACKER_UPDATE = lib.name .. "_TrackerUpdate"
 
 local SOURCE_SKYSHARDS = "skyshards"
 local SOURCE_LOREBOOKS = "lorebooks"
+local SOURCE_ACTIVE_QUEST = "activequest"
 
 local SKYSHARDS_PINDATA_LOCX = 1
 local SKYSHARDS_PINDATA_LOCY = 2
@@ -18,6 +19,7 @@ local SKYSHARDS_PINDATA_ZONEGUIDEINDEX = 4
 local LORE_LIBRARY_SHALIDOR = 1
 
 local SOURCE_COLOURS = {
+  [SOURCE_ACTIVE_QUEST] = { r = 0.937, g = 0.773, b = 0.278, a = 1 },
   [SOURCE_SKYSHARDS] = { r = 0.529, g = 0.808, b = 0.922, a = 1 },
   [SOURCE_LOREBOOKS] = { r = 0.788, g = 0.651, b = 0.275, a = 1 },
 }
@@ -34,6 +36,7 @@ local MIGRATION_SOURCE_COLOURS = {
 local defaults = {
   tracker = {
     enabled = false,
+    trackActiveQuest = true,
     trackSkyShards = true,
     trackLoreBooks = true,
     useFaux3DArrow = false,
@@ -42,6 +45,12 @@ local defaults = {
     showMarker = true,
     scanIntervalMs = 250,
     sourceColours = {
+      [SOURCE_ACTIVE_QUEST] = {
+        r = SOURCE_COLOURS[SOURCE_ACTIVE_QUEST].r,
+        g = SOURCE_COLOURS[SOURCE_ACTIVE_QUEST].g,
+        b = SOURCE_COLOURS[SOURCE_ACTIVE_QUEST].b,
+        a = SOURCE_COLOURS[SOURCE_ACTIVE_QUEST].a,
+      },
       [SOURCE_SKYSHARDS] = {
         r = SOURCE_COLOURS[SOURCE_SKYSHARDS].r,
         g = SOURCE_COLOURS[SOURCE_SKYSHARDS].g,
@@ -60,6 +69,17 @@ local defaults = {
 
 local function GetSettings()
   return integration.savedVars and integration.savedVars.tracker
+end
+
+local function GetQuestTrackerState()
+  integration.questTrackerState = integration.questTrackerState or {
+    questIndex = nil,
+    currentMapId = nil,
+    candidate = nil,
+    dirty = true,
+  }
+
+  return integration.questTrackerState
 end
 
 local function CopyColour(target, source)
@@ -108,6 +128,10 @@ end
 
 local function IsSkyShardsAvailable()
   return _G["SkyShards"] ~= nil and type(_G["SkyShards_GetLocalData"]) == "function"
+end
+
+local function IsActiveQuestAvailable()
+  return FOCUSED_QUEST_TRACKER ~= nil and type(ZO_WorldMap_GetPinManager) == "function"
 end
 
 local function IsLoreBooksAvailable()
@@ -188,6 +212,105 @@ local function GetLocalDistanceScore(x1, y1, x2, y2)
   local dx = x1 - x2
   local dy = y1 - y2
   return zo_sqrt(dx * dx + dy * dy)
+end
+
+local function FindTrackedQuestIndex()
+  for questIndex = 1, MAX_JOURNAL_QUESTS do
+    if IsValidQuestIndex(questIndex) then
+      local _, _, _, _, _, _, tracked = GetJournalQuestInfo(questIndex)
+      if tracked then
+        return questIndex
+      end
+    end
+  end
+end
+
+local function MarkQuestTargetDirty(questIndex)
+  local questState = GetQuestTrackerState()
+  if questIndex ~= nil then
+    questState.questIndex = questIndex
+  end
+  questState.dirty = true
+end
+
+local function ShouldUseActiveQuest()
+  local settings = GetSettings()
+  return settings
+    and settings.trackActiveQuest
+    and IsActiveQuestAvailable()
+end
+
+local function RefreshQuestTargetCache(playerX, playerY)
+  local questState = GetQuestTrackerState()
+  local currentMapId = GetCurrentMapId()
+
+  if not questState.questIndex or not IsValidQuestIndex(questState.questIndex) then
+    questState.questIndex = FindTrackedQuestIndex()
+  end
+
+  questState.currentMapId = currentMapId
+  questState.candidate = nil
+  questState.dirty = false
+
+  if not currentMapId or currentMapId == 0 then
+    return
+  end
+
+  if not questState.questIndex or not IsValidQuestIndex(questState.questIndex) then
+    return
+  end
+
+  local pinManager = ZO_WorldMap_GetPinManager()
+  if not pinManager or not pinManager.AddPinsToArray then
+    return
+  end
+
+  local pins = {}
+  pinManager:AddPinsToArray(pins, "quest", questState.questIndex)
+
+  local bestX = nil
+  local bestY = nil
+  local bestDistance = nil
+
+  for _, pin in ipairs(pins) do
+    local x, y = pin:GetNormalizedPosition()
+    if x and y then
+      local distance = GetLocalDistanceScore(playerX, playerY, x, y)
+      if not bestDistance or distance < bestDistance then
+        bestX = x
+        bestY = y
+        bestDistance = distance
+      end
+    end
+  end
+
+  if bestX and bestY then
+    questState.candidate = {
+      source = SOURCE_ACTIVE_QUEST,
+      x = bestX,
+      y = bestY,
+      distance = bestDistance or 0,
+      key = string.format("%d:%d:%.5f:%.5f", currentMapId, questState.questIndex, bestX, bestY),
+    }
+  end
+end
+
+local function FindActiveQuestCandidate(playerX, playerY)
+  if not ShouldUseActiveQuest() then
+    return nil
+  end
+
+  local questState = GetQuestTrackerState()
+  local currentMapId = GetCurrentMapId()
+  if questState.currentMapId ~= currentMapId then
+    questState.dirty = true
+  end
+
+  if questState.dirty then
+    RefreshQuestTargetCache(playerX, playerY)
+  end
+
+  return questState.candidate
 end
 
 local function GetSkyshardIdByCriteria(zoneId, criteriaIndex, expectedX, expectedY)
@@ -463,6 +586,11 @@ local function FindBestCandidate()
     return nil
   end
 
+  local activeQuestCandidate = FindActiveQuestCandidate(playerX, playerY)
+  if activeQuestCandidate then
+    return activeQuestCandidate
+  end
+
   local bestCandidate = FindSkyShardCandidate(playerX, playerY)
   local loreBooksCandidate = FindLoreBookCandidate(playerX, playerY)
 
@@ -502,6 +630,26 @@ local function StopTracker()
   HideTrackerArrow()
 end
 
+local function RefreshQuestTrackingState()
+  local questState = GetQuestTrackerState()
+  questState.questIndex = FindTrackedQuestIndex()
+  questState.dirty = true
+
+  if integration.savedVars then
+    integration:RefreshTarget()
+  end
+end
+
+local function OnQuestAssistStateChanged(_, assistedData)
+  local questIndex = assistedData and assistedData.arg1 or FindTrackedQuestIndex()
+  MarkQuestTargetDirty(questIndex)
+  integration:RefreshTarget()
+end
+
+local function OnQuestTargetChanged()
+  RefreshQuestTrackingState()
+end
+
 local function RefreshTrackerState()
   local settings = GetSettings()
   if not settings or not settings.enabled then
@@ -538,7 +686,7 @@ local function InitializeSettingsPanel()
   local optionsTable = {
     {
       type = "description",
-      text = "Optional auto-tracking for the nearest SkyShards or LoreBooks Shalidor target on the current map.",
+      text = "Optional auto-tracking for the assisted quest or for nearby SkyShards and LoreBooks targets on the current map.",
       width = "full",
     },
     {
@@ -554,6 +702,23 @@ local function InitializeSettingsPanel()
       end,
       default = defaults.tracker.enabled,
       width = "full",
+    },
+    {
+      type = "checkbox",
+      name = "Track Active Quest",
+      tooltip = "Tracks the currently assisted quest when it has a target pin on the current map. This source takes priority over collectible sources.",
+      getFunc = function()
+        return settings.trackActiveQuest
+      end,
+      setFunc = function(value)
+        settings.trackActiveQuest = value
+        integration:RefreshTarget()
+      end,
+      default = defaults.tracker.trackActiveQuest,
+      disabled = function()
+        return not IsActiveQuestAvailable()
+      end,
+      width = "half",
     },
     {
       type = "checkbox",
@@ -669,6 +834,23 @@ local function InitializeSettingsPanel()
     },
     {
       type = "colorpicker",
+      name = "Active Quest Colour",
+      tooltip = "Used for the managed arrow, marker, glow, and distance text when tracking the assisted quest.",
+      getFunc = function()
+        local colour = settings.sourceColours[SOURCE_ACTIVE_QUEST]
+        return colour.r, colour.g, colour.b, colour.a
+      end,
+      setFunc = function(r, g, b, a)
+        local colour = settings.sourceColours[SOURCE_ACTIVE_QUEST]
+        colour.r, colour.g, colour.b, colour.a = r, g, b, a
+        if integration.currentSource == SOURCE_ACTIVE_QUEST then
+          ApplySourceColour(SOURCE_ACTIVE_QUEST)
+        end
+      end,
+      width = "half",
+    },
+    {
+      type = "colorpicker",
       name = "SkyShards Colour",
       tooltip = "Used for the managed arrow, marker, glow, and distance text when tracking SkyShards.",
       getFunc = function()
@@ -708,16 +890,28 @@ local function InitializeSettingsPanel()
 end
 
 local function OnPlayerActivated()
+  RefreshQuestTrackingState()
   integration:RefreshTarget()
 end
 
 local function InitializeIntegration()
   integration.savedVars = ZO_SavedVars:NewAccountWide("Lib3DArrow_SavedVariables", 1, nil, defaults)
   EnsureSettingsDefaults()
+  RefreshQuestTrackingState()
   RefreshTrackerState()
   InitializeSettingsPanel()
 
+  if FOCUSED_QUEST_TRACKER and FOCUSED_QUEST_TRACKER.RegisterCallback then
+    FOCUSED_QUEST_TRACKER:RegisterCallback("QuestTrackerAssistStateChanged", OnQuestAssistStateChanged)
+  end
+
   EVENT_MANAGER:RegisterForEvent(INIT_EVENT, EVENT_PLAYER_ACTIVATED, OnPlayerActivated)
+  EVENT_MANAGER:RegisterForEvent(INIT_EVENT, EVENT_QUEST_ADDED, OnQuestTargetChanged)
+  EVENT_MANAGER:RegisterForEvent(INIT_EVENT, EVENT_QUEST_REMOVED, OnQuestTargetChanged)
+  EVENT_MANAGER:RegisterForEvent(INIT_EVENT, EVENT_QUEST_ADVANCED, OnQuestTargetChanged)
+  EVENT_MANAGER:RegisterForEvent(INIT_EVENT, EVENT_QUEST_CONDITION_COUNTER_CHANGED, OnQuestTargetChanged)
+  EVENT_MANAGER:RegisterForEvent(INIT_EVENT, EVENT_QUEST_CONDITION_OVERRIDE_TEXT_CHANGED, OnQuestTargetChanged)
+  EVENT_MANAGER:RegisterForEvent(INIT_EVENT, EVENT_QUEST_LIST_UPDATED, OnQuestTargetChanged)
 end
 
 local function OnAddonLoaded(eventCode, addonName)
