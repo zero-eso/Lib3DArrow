@@ -7,6 +7,7 @@ local PANEL_NAME = lib.name .. "_OptionsPanel"
 local INIT_EVENT = lib.name .. "_IntegrationInit"
 local TRACKER_UPDATE = lib.name .. "_TrackerUpdate"
 
+local SOURCE_DESTINATION = "destination"
 local SOURCE_SKYSHARDS = "skyshards"
 local SOURCE_LOREBOOKS = "lorebooks"
 local SOURCE_ACTIVE_QUEST = "activequest"
@@ -19,6 +20,7 @@ local SKYSHARDS_PINDATA_ZONEGUIDEINDEX = 4
 local LORE_LIBRARY_SHALIDOR = 1
 
 local SOURCE_COLOURS = {
+  [SOURCE_DESTINATION] = { r = 1, g = 0.494, b = 0.153, a = 1 },
   [SOURCE_ACTIVE_QUEST] = { r = 0.937, g = 0.773, b = 0.278, a = 1 },
   [SOURCE_SKYSHARDS] = { r = 0.529, g = 0.808, b = 0.922, a = 1 },
   [SOURCE_LOREBOOKS] = { r = 0.788, g = 0.651, b = 0.275, a = 1 },
@@ -36,6 +38,7 @@ local MIGRATION_SOURCE_COLOURS = {
 local defaults = {
   tracker = {
     enabled = false,
+    trackDestination = true,
     trackActiveQuest = true,
     trackSkyShards = true,
     trackLoreBooks = true,
@@ -48,6 +51,12 @@ local defaults = {
     hideMarkerNearTargetDistance = 10,
     scanIntervalMs = 250,
     sourceColours = {
+      [SOURCE_DESTINATION] = {
+        r = SOURCE_COLOURS[SOURCE_DESTINATION].r,
+        g = SOURCE_COLOURS[SOURCE_DESTINATION].g,
+        b = SOURCE_COLOURS[SOURCE_DESTINATION].b,
+        a = SOURCE_COLOURS[SOURCE_DESTINATION].a,
+      },
       [SOURCE_ACTIVE_QUEST] = {
         r = SOURCE_COLOURS[SOURCE_ACTIVE_QUEST].r,
         g = SOURCE_COLOURS[SOURCE_ACTIVE_QUEST].g,
@@ -131,6 +140,10 @@ end
 
 local function IsSkyShardsAvailable()
   return _G["SkyShards"] ~= nil and type(_G["SkyShards_GetLocalData"]) == "function"
+end
+
+local function IsDestinationAvailable()
+  return type(GetMapPlayerWaypoint) == "function"
 end
 
 local function IsActiveQuestAvailable()
@@ -247,6 +260,16 @@ local function GetLocalDistanceScore(x1, y1, x2, y2)
   return zo_sqrt(dx * dx + dy * dy)
 end
 
+local function BuildCandidate(source, x, y, distance, key)
+  return {
+    source = source,
+    x = x,
+    y = y,
+    distance = distance,
+    key = key,
+  }
+end
+
 local function FindTrackedQuestIndex()
   for questIndex = 1, MAX_JOURNAL_QUESTS do
     if IsValidQuestIndex(questIndex) then
@@ -271,6 +294,32 @@ local function ShouldUseActiveQuest()
   return settings
     and settings.trackActiveQuest
     and IsActiveQuestAvailable()
+end
+
+local function ShouldUseDestination()
+  local settings = GetSettings()
+  return settings
+    and settings.trackDestination
+    and IsDestinationAvailable()
+end
+
+local function FindDestinationCandidate(playerX, playerY)
+  if not ShouldUseDestination() then
+    return nil
+  end
+
+  local x, y = GetMapPlayerWaypoint()
+  if not x or not y or (x == 0 and y == 0) then
+    return nil
+  end
+
+  return BuildCandidate(
+    SOURCE_DESTINATION,
+    x,
+    y,
+    GetLocalDistanceScore(playerX, playerY, x, y),
+    string.format("%d:%.5f:%.5f", GetCurrentMapId() or 0, x, y)
+  )
 end
 
 local function RefreshQuestTargetCache(playerX, playerY)
@@ -519,16 +568,6 @@ local function ShouldUseLoreBooks()
   return loreBooks.db.filters[internal.PINS_UNKNOWN] and ShouldDisplayLoreBooks()
 end
 
-local function BuildCandidate(source, x, y, distance, key)
-  return {
-    source = source,
-    x = x,
-    y = y,
-    distance = distance,
-    key = key,
-  }
-end
-
 local function FindSkyShardCandidate(playerX, playerY)
   if not ShouldUseSkyShards() then
     return nil
@@ -619,6 +658,11 @@ local function FindBestCandidate()
     return nil
   end
 
+  local destinationCandidate = FindDestinationCandidate(playerX, playerY)
+  if destinationCandidate then
+    return destinationCandidate
+  end
+
   local activeQuestCandidate = FindActiveQuestCandidate(playerX, playerY)
   if activeQuestCandidate then
     return activeQuestCandidate
@@ -684,6 +728,16 @@ local function OnQuestTargetChanged()
   RefreshQuestTrackingState()
 end
 
+local function OnMapPing(_, pingEventType, pingType)
+  if pingType ~= MAP_PIN_TYPE_PLAYER_WAYPOINT then
+    return
+  end
+
+  if pingEventType == PING_EVENT_ADDED or pingEventType == PING_EVENT_REMOVED then
+    integration:RefreshTarget()
+  end
+end
+
 local function RefreshTrackerState()
   local settings = GetSettings()
   if not settings or not settings.enabled then
@@ -720,7 +774,7 @@ local function InitializeSettingsPanel()
   local optionsTable = {
     {
       type = "description",
-      text = "Optional auto-tracking for the assisted quest or for nearby SkyShards and LoreBooks targets on the current map.",
+      text = "Optional auto-tracking for the marked destination, assisted quest, or nearby SkyShards and LoreBooks targets on the current map.",
       width = "full",
     },
     {
@@ -736,6 +790,23 @@ local function InitializeSettingsPanel()
       end,
       default = defaults.tracker.enabled,
       width = "full",
+    },
+    {
+      type = "checkbox",
+      name = "Track Marked Destination",
+      tooltip = "Tracks the player waypoint set with Set Destination on the current map. This source takes top priority when present.",
+      getFunc = function()
+        return settings.trackDestination
+      end,
+      setFunc = function(value)
+        settings.trackDestination = value
+        integration:RefreshTarget()
+      end,
+      default = defaults.tracker.trackDestination,
+      disabled = function()
+        return not IsDestinationAvailable()
+      end,
+      width = "half",
     },
     {
       type = "checkbox",
@@ -922,6 +993,23 @@ local function InitializeSettingsPanel()
     },
     {
       type = "colorpicker",
+      name = "Marked Destination Colour",
+      tooltip = "Used for the managed arrow, marker, glow, and distance text when tracking the player-set destination.",
+      getFunc = function()
+        local colour = settings.sourceColours[SOURCE_DESTINATION]
+        return colour.r, colour.g, colour.b, colour.a
+      end,
+      setFunc = function(r, g, b, a)
+        local colour = settings.sourceColours[SOURCE_DESTINATION]
+        colour.r, colour.g, colour.b, colour.a = r, g, b, a
+        if integration.currentSource == SOURCE_DESTINATION then
+          ApplySourceColour(SOURCE_DESTINATION)
+        end
+      end,
+      width = "half",
+    },
+    {
+      type = "colorpicker",
       name = "Active Quest Colour",
       tooltip = "Used for the managed arrow, marker, glow, and distance text when tracking the assisted quest.",
       getFunc = function()
@@ -994,6 +1082,7 @@ local function InitializeIntegration()
   end
 
   EVENT_MANAGER:RegisterForEvent(INIT_EVENT, EVENT_PLAYER_ACTIVATED, OnPlayerActivated)
+  EVENT_MANAGER:RegisterForEvent(INIT_EVENT, EVENT_MAP_PING, OnMapPing)
   EVENT_MANAGER:RegisterForEvent(INIT_EVENT, EVENT_QUEST_ADDED, OnQuestTargetChanged)
   EVENT_MANAGER:RegisterForEvent(INIT_EVENT, EVENT_QUEST_REMOVED, OnQuestTargetChanged)
   EVENT_MANAGER:RegisterForEvent(INIT_EVENT, EVENT_QUEST_ADVANCED, OnQuestTargetChanged)
