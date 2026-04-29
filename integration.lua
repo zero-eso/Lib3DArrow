@@ -503,7 +503,9 @@ end
 local function RefreshQuestTargetCache(playerX, playerY)
   local questState = GetQuestTrackerState()
   local currentMapId = GetCurrentMapId()
+  local previousMapId = questState.currentMapId
   local previousCandidate = questState.candidate
+  local mapChanged = previousMapId ~= nil and previousMapId ~= currentMapId
 
   if not questState.questIndex or not IsValidQuestIndex(questState.questIndex) then
     questState.questIndex = FindTrackedQuestIndex()
@@ -513,21 +515,21 @@ local function RefreshQuestTargetCache(playerX, playerY)
   ClearQuestRetry(questState)
 
   if not currentMapId or currentMapId == 0 then
-    questState.candidate = previousCandidate
+    questState.candidate = mapChanged and nil or previousCandidate
     questState.dirty = false
     ScheduleQuestRetry(questState)
     return
   end
 
   if not questState.questIndex or not IsValidQuestIndex(questState.questIndex) then
-    questState.candidate = previousCandidate
+    questState.candidate = mapChanged and nil or previousCandidate
     questState.dirty = false
     ScheduleQuestRetry(questState, QUEST_BOOTSTRAP_RETRY_WINDOW_MS)
     return
   end
 
   if not GPS or not GPS.GlobalToLocal then
-    questState.candidate = previousCandidate
+    questState.candidate = mapChanged and nil or previousCandidate
     questState.dirty = false
     ScheduleQuestRetry(questState)
     return
@@ -545,15 +547,16 @@ local function RefreshQuestTargetCache(playerX, playerY)
   PopCurrentMapContext(hasStoredMap)
 
   if mapResult == SET_MAP_RESULT_FAILED then
-    questState.candidate = nil
+    questState.candidate = mapChanged and nil or previousCandidate
     questState.dirty = false
+    ScheduleQuestRetry(questState, QUEST_BOOTSTRAP_RETRY_WINDOW_MS)
     return
   end
 
   if not hasQuestPins or #globalTargets == 0 then
-    questState.candidate = previousCandidate
+    questState.candidate = mapChanged and nil or previousCandidate
     questState.dirty = false
-    ScheduleQuestRetry(questState)
+    ScheduleQuestRetry(questState, mapChanged and QUEST_BOOTSTRAP_RETRY_WINDOW_MS or QUEST_RETRY_WINDOW_MS)
     return
   end
 
@@ -582,7 +585,8 @@ local function RefreshQuestTargetCache(playerX, playerY)
       key = string.format("%d:%d:%.5f:%.5f", currentMapId, questState.questIndex, bestX, bestY),
     }
   else
-    questState.candidate = nil
+    questState.candidate = mapChanged and nil or previousCandidate
+    ScheduleQuestRetry(questState, mapChanged and QUEST_BOOTSTRAP_RETRY_WINDOW_MS or QUEST_RETRY_WINDOW_MS)
   end
 
   questState.dirty = false
@@ -943,12 +947,19 @@ local function RefreshQuestTrackingState()
   end
 end
 
+local function ScheduleQuestTrackingRefreshes(...)
+  local delays = { ... }
+  for _, delayMS in ipairs(delays) do
+    zo_callLater(function()
+      RefreshQuestTrackingState()
+    end, delayMS)
+  end
+end
+
 local function OnQuestAssistStateChanged(_, assistedData)
   local questIndex = GetFocusedQuestIndex() or (assistedData and assistedData.arg1) or FindTrackedQuestIndex()
   MarkQuestTargetDirty(questIndex)
-  zo_callLater(function()
-    RefreshQuestTrackingState()
-  end, 50)
+  ScheduleQuestTrackingRefreshes(50, 250, 1000)
 end
 
 local function OnQuestTargetChanged()
@@ -1294,9 +1305,7 @@ end
 
 local function OnPlayerActivated()
   RefreshQuestTrackingState()
-  zo_callLater(function()
-    RefreshQuestTrackingState()
-  end, 150)
+  ScheduleQuestTrackingRefreshes(150, 500, 1500, 3000)
   integration:RefreshTarget()
 end
 
