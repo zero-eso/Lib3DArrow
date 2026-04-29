@@ -15,6 +15,47 @@ local function GetColorDef(colour)
   return ZO_ColorDef:New(colour)
 end
 
+local function ClampAlpha(alpha)
+  if alpha == nil then
+    return 1
+  end
+
+  return zo_clamp(alpha, 0, 1)
+end
+
+local function ApplyArrowVisualAlpha(toplevel)
+  if not toplevel.arrow then
+    return
+  end
+
+  local alpha = ClampAlpha(toplevel.data.arrowAlpha)
+  toplevel.arrow.chevron:SetAlpha(alpha)
+  toplevel.arrow.glow:SetAlpha(alpha)
+end
+
+local function ApplyDistanceVisualAlpha(toplevel)
+  if not toplevel.distance or not toplevel.distance.metres then
+    return
+  end
+
+  local alpha = ClampAlpha(toplevel.data.distanceAlpha)
+  for i = 1, #toplevel.distance.metres do
+    toplevel.distance.metres[i]:SetAlpha(alpha)
+  end
+end
+
+local function ApplyMarkerVisualAlpha(toplevel)
+  if not toplevel.marker then
+    return
+  end
+
+  if L3DA.RefreshMarkerAppearance then
+    L3DA:RefreshMarkerAppearance(toplevel, toplevel.data)
+  elseif toplevel.marker.pillar then
+    toplevel.marker.pillar:SetAlpha(0.5 * ClampAlpha(toplevel.data.markerAlpha))
+  end
+end
+
 -------------------------------------------------------------------------------------------
 L3DA = L3DA or {}
 local allArrows = {}
@@ -207,6 +248,9 @@ function lib:CreateArrow(data)
 
   -- arrow and distance use this
   data.arrowMagnitude = data.arrowMagnitude or 5
+  data.arrowAlpha = ClampAlpha(data.arrowAlpha)
+  data.distanceAlpha = ClampAlpha(data.distanceAlpha)
+  data.markerAlpha = ClampAlpha(data.markerAlpha)
 
   -- Top Level
   local toplevel = WINDOW_MANAGER:CreateTopLevelWindow(self.name .. "_TopLevel" .. uniqueId)
@@ -245,6 +289,21 @@ function lib:CreateArrow(data)
     return self.data.targetX, self.data.targetY
   end
 
+  function toplevel:SetArrowAlpha(alpha)
+    self.data.arrowAlpha = ClampAlpha(alpha)
+    ApplyArrowVisualAlpha(self)
+  end
+
+  function toplevel:SetDistanceAlpha(alpha)
+    self.data.distanceAlpha = ClampAlpha(alpha)
+    ApplyDistanceVisualAlpha(self)
+  end
+
+  function toplevel:SetMarkerAlpha(alpha)
+    self.data.markerAlpha = ClampAlpha(alpha)
+    ApplyMarkerVisualAlpha(self)
+  end
+
   function toplevel:ChangeColours(arrowColour, markerColour)
     local c
 
@@ -256,6 +315,7 @@ function lib:CreateArrow(data)
         if self.arrow.glow then
           self.arrow.glow:SetColor(c.r, c.g, c.b, c.a)
         end
+        ApplyArrowVisualAlpha(self)
       end
     end
 
@@ -264,13 +324,7 @@ function lib:CreateArrow(data)
       self.data.distanceColour = markerColour
 
       if self.marker then
-        if L3DA.RefreshMarkerAppearance then
-          L3DA:RefreshMarkerAppearance(self, self.data)
-        elseif self.marker.pillar then
-          c = GetColorDef(markerColour)
-          self.marker.pillar:SetColor(c.r, c.g, c.b, c.a)
-          self.marker.pillar:SetAlpha(0.5)
-        end
+        ApplyMarkerVisualAlpha(self)
       end
 
       if self.distance and self.distance.label then
@@ -281,15 +335,14 @@ function lib:CreateArrow(data)
         for i = 1, #self.distance.metres do
           self.distance.metres[i]:SetColor(c.r, c.g, c.b, c.a)
         end
+        ApplyDistanceVisualAlpha(self)
       end
     end
   end
 
   function toplevel:SetMarkerIconTexture(texturePath)
     self.data.markerIconTexture = texturePath
-    if self.marker and L3DA.RefreshMarkerAppearance then
-      L3DA:RefreshMarkerAppearance(self, self.data)
-    end
+    ApplyMarkerVisualAlpha(self)
   end
 
   -- create compoonents

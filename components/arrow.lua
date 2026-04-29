@@ -20,7 +20,7 @@ function L3DA:UpdateArrow(parent, data, pData)
 
   -- glowing animation
   local time = GetFrameTimeSeconds()
-  parent.arrow.glow:SetAlpha(1 - math.sin(time))
+  parent.arrow.glow:SetAlpha(zo_min(1, 1 - math.sin(time)) * (data.arrowAlpha or 1))
 end
 
 function L3DA:CreateArrow(parent, data)
@@ -29,6 +29,7 @@ function L3DA:CreateArrow(parent, data)
   data.arrowScale = data.arrowScale or 2
   data.arrowHeight = data.arrowHeight or 1.5
   data.arrowColour = data.arrowColour or "3F9092"
+  data.arrowAlpha = data.arrowAlpha or 1
   data.arrowHeight = data.arrowHeight + (parent.uniqueId * 0.005)
 
   -- Arrow
@@ -42,6 +43,7 @@ function L3DA:CreateArrow(parent, data)
   glow:Create3DRenderSpace()
   local c = ZO_ColorDef:New(data.arrowColour)
   glow:SetColor(c.r, c.g, c.b, c.a)
+  glow:SetAlpha(data.arrowAlpha)
   glow:Set3DLocalDimensions(data.arrowScale, data.arrowScale)
   glow:Set3DRenderSpaceUsesDepthBuffer(data.depthBuffer)
   glow:Set3DRenderSpaceOrigin(0, 0, 0)
@@ -51,6 +53,7 @@ function L3DA:CreateArrow(parent, data)
   chevron:Create3DRenderSpace()
   chevron:SetTexture(ARROW_TEXTURE)
   chevron:SetColor(c.r, c.g, c.b, c.a)
+  chevron:SetAlpha(data.arrowAlpha)
   chevron:Set3DLocalDimensions(data.arrowScale, data.arrowScale)
   chevron:Set3DRenderSpaceUsesDepthBuffer(data.depthBuffer)
   chevron:Set3DRenderSpaceOrigin(0, 0, 0)

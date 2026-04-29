@@ -33,6 +33,7 @@ function L3DA:RefreshMarkerAppearance(parent, data)
   data.markerIconWidth = data.markerIconWidth or 2.5
   data.markerIconHeight = data.markerIconHeight or 2.5
   data.markerIconOffsetY = data.markerIconOffsetY or 7.5
+  data.markerAlpha = data.markerAlpha or 1
 
   local colour = GetMarkerColour(data)
   local alpha = colour.a or 1
@@ -40,14 +41,14 @@ function L3DA:RefreshMarkerAppearance(parent, data)
   local stem = parent.marker.stem
   stem:SetTexture(data.markerStemTexture)
   stem:SetColor(colour.r, colour.g, colour.b, alpha)
-  stem:SetAlpha(alpha * 0.55)
+  stem:SetAlpha(0.55 * data.markerAlpha)
   stem:Set3DLocalDimensions(GetScaledValue(data, data.markerStemWidth), GetScaledValue(data, data.markerStemHeight))
   stem:Set3DRenderSpaceOrigin(0, GetScaledValue(data, data.markerStemOffsetY), 0)
 
   local icon = parent.marker.icon
   icon:SetTexture(data.markerIconTexture)
   icon:SetColor(colour.r, colour.g, colour.b, alpha)
-  icon:SetAlpha(alpha)
+  icon:SetAlpha(data.markerAlpha)
   icon:Set3DLocalDimensions(GetScaledValue(data, data.markerIconWidth), GetScaledValue(data, data.markerIconHeight))
   icon:Set3DRenderSpaceOrigin(0, GetScaledValue(data, data.markerIconOffsetY), 0)
 end

@@ -209,24 +209,35 @@ local function GetCurrentTargetDistance()
   return integration.currentDistance
 end
 
-local function ShouldHideArrowNearTarget()
-  local settings = GetSettings()
-  if not settings or not settings.hideArrowNearTarget then
-    return false
+local function GetNearTargetFadeAlpha(isEnabled, threshold)
+  if not isEnabled then
+    return 1
   end
 
   local distance = GetCurrentTargetDistance()
-  return distance ~= nil and distance <= settings.hideArrowNearTargetDistance
+  if distance == nil or threshold == nil or threshold <= 0 then
+    return 1
+  end
+
+  return zo_clamp(distance / threshold, 0, 1)
 end
 
-local function ShouldHideMarkerNearTarget()
+local function GetArrowFadeAlpha()
   local settings = GetSettings()
-  if not settings or not settings.hideMarkerNearTarget then
-    return false
+  if not settings then
+    return 1
   end
 
-  local distance = GetCurrentTargetDistance()
-  return distance ~= nil and distance <= settings.hideMarkerNearTargetDistance
+  return GetNearTargetFadeAlpha(settings.hideArrowNearTarget, settings.hideArrowNearTargetDistance)
+end
+
+local function GetMarkerFadeAlpha()
+  local settings = GetSettings()
+  if not settings then
+    return 1
+  end
+
+  return GetNearTargetFadeAlpha(settings.hideMarkerNearTarget, settings.hideMarkerNearTargetDistance)
 end
 
 local function ApplyVisualSettings()
@@ -240,12 +251,22 @@ local function ApplyVisualSettings()
   end
 
   local arrow = EnsureTrackerArrow()
-  local hideArrow = ShouldHideArrowNearTarget()
-  local hideMarker = ShouldHideMarkerNearTarget()
+  local arrowAlpha = GetArrowFadeAlpha()
+  local markerAlpha = GetMarkerFadeAlpha()
 
-  arrow.arrow:SetHidden(hideArrow)
-  arrow.distance:SetHidden(not settings.showDistance)
-  arrow.marker:SetHidden(not settings.showMarker or hideMarker)
+  if arrow.SetArrowAlpha then
+    arrow:SetArrowAlpha(arrowAlpha)
+  end
+  if arrow.SetDistanceAlpha then
+    arrow:SetDistanceAlpha(arrowAlpha)
+  end
+  if arrow.SetMarkerAlpha then
+    arrow:SetMarkerAlpha(markerAlpha)
+  end
+
+  arrow.arrow:SetHidden(arrowAlpha <= 0)
+  arrow.distance:SetHidden(not settings.showDistance or arrowAlpha <= 0)
+  arrow.marker:SetHidden(not settings.showMarker or markerAlpha <= 0)
 end
 
 local function ApplySourceColour(source)
@@ -1086,7 +1107,7 @@ local function InitializeSettingsPanel()
     {
       type = "checkbox",
       name = "Hide Arrow Near Target",
-      tooltip = "Hides the large arrow when you are within the configured distance of the current target.",
+      tooltip = "Fades the large arrow and distance label while you are within the configured distance of the current target, reaching full transparency at the target.",
       getFunc = function()
         return settings.hideArrowNearTarget
       end,
@@ -1100,7 +1121,7 @@ local function InitializeSettingsPanel()
     {
       type = "slider",
       name = "Hide Arrow Within Distance",
-      tooltip = "When the current target is at or below this distance in meters, the arrow is hidden.",
+      tooltip = "Within this distance in meters, the arrow and distance label fade progressively until they reach full transparency at the target.",
       min = 1,
       max = 100,
       step = 1,
@@ -1120,7 +1141,7 @@ local function InitializeSettingsPanel()
     {
       type = "checkbox",
       name = "Hide Marker Near Target",
-      tooltip = "Hides the world marker when you are within the configured distance of the current target.",
+      tooltip = "Fades the world marker while you are within the configured distance of the current target, reaching full transparency at the target.",
       getFunc = function()
         return settings.hideMarkerNearTarget
       end,
@@ -1134,7 +1155,7 @@ local function InitializeSettingsPanel()
     {
       type = "slider",
       name = "Hide Marker Within Distance",
-      tooltip = "When the current target is at or below this distance in meters, the marker is hidden.",
+      tooltip = "Within this distance in meters, the marker fades progressively until it reaches full transparency at the target.",
       min = 1,
       max = 100,
       step = 1,

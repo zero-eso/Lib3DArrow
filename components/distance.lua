@@ -58,6 +58,7 @@ function L3DA:CreateDistance(parent, data)
   data.distanceColour = data.distanceColour or "FFFFFF"
   data.distanceMagnitude = data.distanceMagnitude or 5
   data.distanceHeight = data.distanceHeight or 1.5
+  data.distanceAlpha = data.distanceAlpha or 1
 
   parent.distance = WINDOW_MANAGER:CreateControl(nil, parent, CT_CONTROL)
   local distance = parent.distance
@@ -71,6 +72,7 @@ function L3DA:CreateDistance(parent, data)
     metres:Create3DRenderSpace()
     local c = ZO_ColorDef:New(data.distanceColour)
     metres:SetColor(c.r, c.g, c.b, c.a)
+    metres:SetAlpha(data.distanceAlpha)
     metres:SetTexture("Lib3DArrow/art/font.dds")
     metres:Set3DRenderSpaceUsesDepthBuffer(data.depthBuffer)
   end
