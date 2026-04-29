@@ -264,9 +264,13 @@ function lib:CreateArrow(data)
       self.data.distanceColour = markerColour
 
       if self.marker then
-        c = GetColorDef(markerColour)
-        self.marker.pillar:SetColor(c.r, c.g, c.b, c.a)
-        self.marker.pillar:SetAlpha(0.5)
+        if L3DA.RefreshMarkerAppearance then
+          L3DA:RefreshMarkerAppearance(self, self.data)
+        elseif self.marker.pillar then
+          c = GetColorDef(markerColour)
+          self.marker.pillar:SetColor(c.r, c.g, c.b, c.a)
+          self.marker.pillar:SetAlpha(0.5)
+        end
       end
 
       if self.distance and self.distance.label then
@@ -278,6 +282,13 @@ function lib:CreateArrow(data)
           self.distance.metres[i]:SetColor(c.r, c.g, c.b, c.a)
         end
       end
+    end
+  end
+
+  function toplevel:SetMarkerIconTexture(texturePath)
+    self.data.markerIconTexture = texturePath
+    if self.marker and L3DA.RefreshMarkerAppearance then
+      L3DA:RefreshMarkerAppearance(self, self.data)
     end
   end
 

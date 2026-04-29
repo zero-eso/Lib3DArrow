@@ -1,59 +1,81 @@
 L3DA = L3DA or {}
 
+local DEFAULT_STEM_TEXTURE = "Lib3DArrow/art/pillar.dds"
+
+local function CreateMarkerPart(parent)
+  local control = WINDOW_MANAGER:CreateControl(nil, parent, CT_TEXTURE)
+  control:Create3DRenderSpace()
+  control:Set3DRenderSpaceUsesDepthBuffer(true)
+  control:Set3DRenderSpaceOrigin(0, 0, 0)
+  return control
+end
+
+local function GetMarkerColour(data)
+  return ZO_ColorDef:New(data.markerColour or "3F9092")
+end
+
+local function GetScaledValue(data, value)
+  return value * (data.markerScale or 1)
+end
+
+function L3DA:RefreshMarkerAppearance(parent, data)
+  if not parent.marker then
+    return
+  end
+
+  data.markerColour = data.markerColour or "3F9092"
+  data.markerScale = data.markerScale or 1
+  data.markerStemTexture = data.markerStemTexture or DEFAULT_STEM_TEXTURE
+  data.markerIconTexture = data.markerIconTexture or data.markerStemTexture
+  data.markerStemWidth = data.markerStemWidth or 0.6
+  data.markerStemHeight = data.markerStemHeight or 8
+  data.markerStemOffsetY = data.markerStemOffsetY or 2
+  data.markerIconWidth = data.markerIconWidth or 3
+  data.markerIconHeight = data.markerIconHeight or 3
+  data.markerIconOffsetY = data.markerIconOffsetY or 5.5
+
+  local colour = GetMarkerColour(data)
+  local alpha = colour.a or 1
+
+  local stem = parent.marker.stem
+  stem:SetTexture(data.markerStemTexture)
+  stem:SetColor(colour.r, colour.g, colour.b, alpha)
+  stem:SetAlpha(alpha * 0.3)
+  stem:Set3DLocalDimensions(GetScaledValue(data, data.markerStemWidth), GetScaledValue(data, data.markerStemHeight))
+  stem:Set3DRenderSpaceOrigin(0, GetScaledValue(data, data.markerStemOffsetY), 0)
+
+  local icon = parent.marker.icon
+  icon:SetTexture(data.markerIconTexture)
+  icon:SetColor(colour.r, colour.g, colour.b, alpha)
+  icon:SetAlpha(alpha)
+  icon:Set3DLocalDimensions(GetScaledValue(data, data.markerIconWidth), GetScaledValue(data, data.markerIconHeight))
+  icon:Set3DRenderSpaceOrigin(0, GetScaledValue(data, data.markerIconOffsetY), 0)
+end
+
 function L3DA:UpdateMarker(parent, data, pData)
-  -- always facing the camera ish
   parent.marker:Set3DRenderSpaceForward(pData.forwardX, pData.forwardY, pData.forwardZ)
   parent.marker:Set3DRenderSpaceRight(pData.rightX, pData.rightY, pData.rightZ)
   parent.marker:Set3DRenderSpaceUp(0, pData.upY, 0)
 
-  -- using metres + angle to work out how far away and which direction the marker is
-  -- prolly useful for hiding based on distance
-  local circ = math.atan2(pData.playerY-data.targetY, data.targetX-pData.playerX) + (90 * math.pi / 180)
-  parent.marker:Set3DRenderSpaceOrigin(pData.worldX + (data.metres * math.sin(circ)), pData.worldY, pData.worldZ + (data.metres * math.cos(circ)))
+  local circ = math.atan2(pData.playerY - data.targetY, data.targetX - pData.playerX) + (90 * math.pi / 180)
+  parent.marker:Set3DRenderSpaceOrigin(
+    pData.worldX + (data.metres * math.sin(circ)),
+    pData.worldY,
+    pData.worldZ + (data.metres * math.cos(circ))
+  )
 end
 
-local MARKER_TYPE =
-{
-  ["pillar"] = {
-    texture = "Lib3DArrow/art/pillar.dds",
-    scaleY = 200,
-  },
-  ["crown"] = {
-    texture = "Lib3DArrow/art/pillar.dds",
-  },
-  ["tank"] = {
-    texture = "Lib3DArrow/art/pillar.dds",
-  },
-  ["dd"] = {
-    texture = "Lib3DArrow/art/pillar.dds",
-  },
-  ["healer"] = {
-    texture = "Lib3DArrow/art/pillar.dds",
-  },
-}
-
-
 function L3DA:CreateMarker(parent, data)
-  -- marker settings/defaults
   data.markerColour = data.markerColour or "3F9092"
   data.markerScale = data.markerScale or 1
-  data.markerType = data.markerType or "pillar"
-  data.markerType = string.lower(data.markerType)
 
   parent.marker = WINDOW_MANAGER:CreateControl(nil, parent, CT_CONTROL)
   local marker = parent.marker
   marker:Create3DRenderSpace()
+  marker:Set3DRenderSpaceOrigin(0, 0, 0)
 
-  marker.pillar = WINDOW_MANAGER:CreateControl(nil, marker, CT_TEXTURE)
-  local pillar = marker.pillar
-  pillar:Create3DRenderSpace()
-  local c = ZO_ColorDef:New(data.markerColour)
-  pillar:SetColor(c.r, c.g, c.b, c.a)
-  pillar:SetAlpha(0.5)
-  pillar:Set3DRenderSpaceUsesDepthBuffer(true)
-  pillar:Set3DRenderSpaceOrigin(0,0,0)
+  marker.stem = CreateMarkerPart(marker)
+  marker.icon = CreateMarkerPart(marker)
 
-  local m = MARKER_TYPE[data.markerType]
-  pillar:SetTexture(m.texture)
-  pillar:Set3DLocalDimensions(m.scaleX or data.markerScale, m.scaleY or data.markerScale)
+  self:RefreshMarkerAppearance(parent, data)
 end

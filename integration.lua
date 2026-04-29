@@ -26,6 +26,13 @@ local SOURCE_COLOURS = {
   [SOURCE_LOREBOOKS] = { r = 0.788, g = 0.651, b = 0.275, a = 1 },
 }
 
+local SOURCE_MARKER_TEXTURES = {
+  [SOURCE_DESTINATION] = "esoui/art/zonestories/completiontypeicon_pointofinterest.dds",
+  [SOURCE_ACTIVE_QUEST] = "esoui/art/zonestories/completiontypeicon_priorityquest.dds",
+  [SOURCE_SKYSHARDS] = "esoui/art/zonestories/completiontypeicon_skyshard.dds",
+  [SOURCE_LOREBOOKS] = "esoui/art/zonestories/completiontypeicon_lorebooks.dds",
+}
+
 local MIGRATION_SOURCE_COLOURS = {
   [SOURCE_SKYSHARDS] = {
     { r = 0.247, g = 0.565, b = 0.573, a = 1 },
@@ -89,6 +96,7 @@ local function GetQuestTrackerState()
     currentMapId = nil,
     candidate = nil,
     dirty = true,
+    retryUntilMS = nil,
   }
 
   return integration.questTrackerState
@@ -244,6 +252,9 @@ local function ApplySourceColour(source)
   end
 
   local colour = GetSourceColour(source)
+  if integration.arrow.SetMarkerIconTexture then
+    integration.arrow:SetMarkerIconTexture(SOURCE_MARKER_TEXTURES[source] or SOURCE_MARKER_TEXTURES[SOURCE_DESTINATION])
+  end
   integration.arrow:ChangeColours(colour, colour)
 end
 
@@ -281,12 +292,38 @@ local function FindTrackedQuestIndex()
   end
 end
 
+local function ClearQuestRetry(questState)
+  questState.retryUntilMS = nil
+end
+
+local function ScheduleQuestRetry(questState, retryWindowMS)
+  if type(GetFrameTimeMilliseconds) ~= "function" then
+    return
+  end
+
+  questState.retryUntilMS = GetFrameTimeMilliseconds() + (retryWindowMS or 1500)
+end
+
+local function ShouldRetryQuestRefresh(questState)
+  if not questState.retryUntilMS or type(GetFrameTimeMilliseconds) ~= "function" then
+    return false
+  end
+
+  if GetFrameTimeMilliseconds() <= questState.retryUntilMS then
+    return true
+  end
+
+  questState.retryUntilMS = nil
+  return false
+end
+
 local function MarkQuestTargetDirty(questIndex)
   local questState = GetQuestTrackerState()
   if questIndex ~= nil then
     questState.questIndex = questIndex
   end
   questState.dirty = true
+  ClearQuestRetry(questState)
 end
 
 local function ShouldUseActiveQuest()
@@ -322,6 +359,107 @@ local function FindDestinationCandidate(playerX, playerY)
   )
 end
 
+local function IsLocalPositionOnCurrentMap(x, y)
+  return x ~= nil
+    and y ~= nil
+    and x >= 0
+    and x <= 1
+    and y >= 0
+    and y <= 1
+end
+
+local function PushCurrentMapContext()
+  if GPS and GPS.PushCurrentMap and GPS.PopCurrentMap then
+    GPS:PushCurrentMap()
+    return true
+  end
+
+  return false
+end
+
+local function PopCurrentMapContext(hasStoredMap)
+  if hasStoredMap and GPS and GPS.PopCurrentMap then
+    GPS:PopCurrentMap()
+  else
+    SetMapToPlayerLocation()
+  end
+end
+
+local function SetMapToQuestTarget(questIndex)
+  local result = SET_MAP_RESULT_FAILED
+
+  for stepIndex = QUEST_MAIN_STEP_INDEX, GetJournalQuestNumSteps(questIndex) do
+    local requireNotCompleted = true
+    local conditionsExhausted = false
+
+    while result == SET_MAP_RESULT_FAILED and not conditionsExhausted do
+      for conditionIndex = 1, GetJournalQuestNumConditions(questIndex, stepIndex) do
+        local tryCondition = true
+        if requireNotCompleted then
+          local isComplete = select(4, GetJournalQuestConditionValues(questIndex, stepIndex, conditionIndex))
+          tryCondition = not isComplete
+        end
+
+        if tryCondition then
+          result = SetMapToQuestCondition(questIndex, stepIndex, conditionIndex)
+          if result ~= SET_MAP_RESULT_FAILED then
+            break
+          end
+        end
+      end
+
+      if requireNotCompleted then
+        requireNotCompleted = false
+      else
+        conditionsExhausted = true
+      end
+    end
+
+    if result ~= SET_MAP_RESULT_FAILED then
+      break
+    end
+
+    if IsJournalQuestStepEnding(questIndex, stepIndex) then
+      result = SetMapToQuestStepEnding(questIndex, stepIndex)
+      if result ~= SET_MAP_RESULT_FAILED then
+        break
+      end
+    end
+  end
+
+  if result == SET_MAP_RESULT_FAILED then
+    result = SetMapToQuestZone(questIndex)
+  end
+
+  return result
+end
+
+local function CollectQuestPinGlobals(questIndex)
+  local pinManager = ZO_WorldMap_GetPinManager()
+  if not pinManager or not pinManager.AddPinsToArray or not GPS or not GPS.LocalToGlobal then
+    return {}, false
+  end
+
+  local pins = {}
+  pinManager:AddPinsToArray(pins, "quest", questIndex)
+
+  local targets = {}
+  for _, pin in ipairs(pins) do
+    local x, y = pin:GetNormalizedPosition()
+    if x and y then
+      local globalX, globalY = GPS:LocalToGlobal(x, y)
+      if globalX and globalY then
+        targets[#targets + 1] = {
+          globalX = globalX,
+          globalY = globalY,
+        }
+      end
+    end
+  end
+
+  return targets, #pins > 0
+end
+
 local function RefreshQuestTargetCache(playerX, playerY)
   local questState = GetQuestTrackerState()
   local currentMapId = GetCurrentMapId()
@@ -331,32 +469,58 @@ local function RefreshQuestTargetCache(playerX, playerY)
   end
 
   questState.currentMapId = currentMapId
-  questState.candidate = nil
-  questState.dirty = false
+  ClearQuestRetry(questState)
 
   if not currentMapId or currentMapId == 0 then
+    questState.candidate = nil
+    questState.dirty = false
     return
   end
 
   if not questState.questIndex or not IsValidQuestIndex(questState.questIndex) then
+    questState.candidate = nil
+    questState.dirty = false
     return
   end
 
-  local pinManager = ZO_WorldMap_GetPinManager()
-  if not pinManager or not pinManager.AddPinsToArray then
+  if not GPS or not GPS.GlobalToLocal then
+    questState.candidate = nil
+    questState.dirty = false
     return
   end
 
-  local pins = {}
-  pinManager:AddPinsToArray(pins, "quest", questState.questIndex)
+  local previousCandidate = questState.candidate
+  local hasStoredMap = PushCurrentMapContext()
+  local mapResult = SetMapToQuestTarget(questState.questIndex)
+  local globalTargets = {}
+  local hasQuestPins = false
+
+  if mapResult ~= SET_MAP_RESULT_FAILED then
+    globalTargets, hasQuestPins = CollectQuestPinGlobals(questState.questIndex)
+  end
+
+  PopCurrentMapContext(hasStoredMap)
+
+  if mapResult == SET_MAP_RESULT_FAILED then
+    questState.candidate = nil
+    questState.dirty = false
+    return
+  end
+
+  if not hasQuestPins or #globalTargets == 0 then
+    questState.candidate = previousCandidate
+    questState.dirty = false
+    ScheduleQuestRetry(questState)
+    return
+  end
 
   local bestX = nil
   local bestY = nil
   local bestDistance = nil
 
-  for _, pin in ipairs(pins) do
-    local x, y = pin:GetNormalizedPosition()
-    if x and y then
+  for _, target in ipairs(globalTargets) do
+    local x, y = GPS:GlobalToLocal(target.globalX, target.globalY)
+    if IsLocalPositionOnCurrentMap(x, y) then
       local distance = GetLocalDistanceScore(playerX, playerY, x, y)
       if not bestDistance or distance < bestDistance then
         bestX = x
@@ -374,7 +538,11 @@ local function RefreshQuestTargetCache(playerX, playerY)
       distance = bestDistance or 0,
       key = string.format("%d:%d:%.5f:%.5f", currentMapId, questState.questIndex, bestX, bestY),
     }
+  else
+    questState.candidate = nil
   end
+
+  questState.dirty = false
 end
 
 local function FindActiveQuestCandidate(playerX, playerY)
@@ -385,6 +553,10 @@ local function FindActiveQuestCandidate(playerX, playerY)
   local questState = GetQuestTrackerState()
   local currentMapId = GetCurrentMapId()
   if questState.currentMapId ~= currentMapId then
+    questState.dirty = true
+  end
+
+  if not questState.dirty and ShouldRetryQuestRefresh(questState) then
     questState.dirty = true
   end
 
@@ -712,6 +884,7 @@ local function RefreshQuestTrackingState()
   local questState = GetQuestTrackerState()
   questState.questIndex = FindTrackedQuestIndex()
   questState.dirty = true
+  ClearQuestRetry(questState)
 
   if integration.savedVars then
     integration:RefreshTarget()
@@ -890,7 +1063,7 @@ local function InitializeSettingsPanel()
     {
       type = "checkbox",
       name = "Show Marker",
-      tooltip = "Shows the managed arrow's world marker pillar.",
+      tooltip = "Shows the managed arrow's world marker.",
       getFunc = function()
         return settings.showMarker
       end,
