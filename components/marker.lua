@@ -54,9 +54,8 @@ function L3DA:RefreshMarkerAppearance(parent, data)
 end
 
 function L3DA:UpdateMarker(parent, data, pData)
-  parent.marker:Set3DRenderSpaceForward(pData.forwardX, pData.forwardY, pData.forwardZ)
-  parent.marker:Set3DRenderSpaceRight(pData.rightX, pData.rightY, pData.rightZ)
-  parent.marker:Set3DRenderSpaceUp(0, pData.upY, 0)
+  local heading = GetPlayerCameraHeading and GetPlayerCameraHeading() or 0
+  parent.marker:Set3DRenderSpaceOrientation(0, heading, 0)
 
   local circ = math.atan2(pData.playerY - data.targetY, data.targetX - pData.playerX) + (90 * math.pi / 180)
   parent.marker:Set3DRenderSpaceOrigin(
