@@ -35,6 +35,32 @@ local SOURCE_MARKER_TEXTURES = {
   [SOURCE_LOREBOOKS] = "esoui/art/zonestories/completiontypeicon_lorebooks.dds",
 }
 
+local DEFAULT_MARKER_LAYOUT = {
+  stemHidden = false,
+  stemWidth = 2.45,
+  stemHeight = 4.5,
+  stemOffsetY = 2.0,
+  stemAlphaScale = 0.6,
+  iconHidden = false,
+  iconWidth = 2.2,
+  iconHeight = 2.2,
+  iconOffsetY = 5.6,
+  iconAlphaScale = 1,
+}
+
+local INTERIOR_ACTIVE_QUEST_MARKER_LAYOUT = {
+  stemHidden = true,
+  stemWidth = 0,
+  stemHeight = 0,
+  stemOffsetY = 0,
+  stemAlphaScale = 0,
+  iconHidden = false,
+  iconWidth = 1.85,
+  iconHeight = 1.85,
+  iconOffsetY = 1.85,
+  iconAlphaScale = 1,
+}
+
 local MIGRATION_SOURCE_COLOURS = {
   [SOURCE_SKYSHARDS] = {
     { r = 0.247, g = 0.565, b = 0.573, a = 1 },
@@ -240,6 +266,71 @@ local function GetMarkerFadeAlpha()
   return GetNearTargetFadeAlpha(settings.hideMarkerNearTarget, settings.hideMarkerNearTargetDistance)
 end
 
+local function IsInHouse()
+  if type(GetCurrentZoneHouseId) == "function" then
+    local houseId = GetCurrentZoneHouseId()
+    if houseId and houseId ~= 0 then
+      return true
+    end
+  end
+
+  if type(GetCurrentHouseOwner) == "function" then
+    local owner = GetCurrentHouseOwner()
+    if owner and owner ~= "" then
+      return true
+    end
+  end
+
+  if type(GetPlayerWorldPositionInHouse) == "function" then
+    local x, y, z, rot = GetPlayerWorldPositionInHouse()
+    if x and y and z and rot and not (x == 0 and y == 0 and z == 0 and rot == 0) then
+      return true
+    end
+  end
+
+  return false
+end
+
+local function ShouldUseCompactQuestMarker()
+  if integration.currentSource ~= SOURCE_ACTIVE_QUEST then
+    return false
+  end
+
+  if IsInHouse() then
+    return true
+  end
+
+  if type(GetMapContentType) == "function" and GetMapContentType() == MAP_CONTENT_DUNGEON then
+    return true
+  end
+
+  if type(IsUnitInDungeon) == "function" and IsUnitInDungeon("player") then
+    return true
+  end
+
+  return type(GetMapType) == "function" and GetMapType() == MAPTYPE_SUBZONE
+end
+
+local function ApplyMarkerLayout()
+  if not integration.arrow or not integration.arrow.data then
+    return
+  end
+
+  local layout = ShouldUseCompactQuestMarker() and INTERIOR_ACTIVE_QUEST_MARKER_LAYOUT or DEFAULT_MARKER_LAYOUT
+  local data = integration.arrow.data
+
+  data.markerStemHidden = layout.stemHidden
+  data.markerStemWidth = layout.stemWidth
+  data.markerStemHeight = layout.stemHeight
+  data.markerStemOffsetY = layout.stemOffsetY
+  data.markerStemAlphaScale = layout.stemAlphaScale
+  data.markerIconHidden = layout.iconHidden
+  data.markerIconWidth = layout.iconWidth
+  data.markerIconHeight = layout.iconHeight
+  data.markerIconOffsetY = layout.iconOffsetY
+  data.markerIconAlphaScale = layout.iconAlphaScale
+end
+
 local function ApplyVisualSettings()
   local settings = GetSettings()
   if not settings then
@@ -253,6 +344,8 @@ local function ApplyVisualSettings()
   local arrow = EnsureTrackerArrow()
   local arrowAlpha = GetArrowFadeAlpha()
   local markerAlpha = GetMarkerFadeAlpha()
+
+  ApplyMarkerLayout()
 
   if arrow.SetArrowAlpha then
     arrow:SetArrowAlpha(arrowAlpha)
