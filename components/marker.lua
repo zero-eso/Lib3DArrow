@@ -1,6 +1,7 @@
 L3DA = L3DA or {}
 
 local DEFAULT_STEM_TEXTURE = "Lib3DArrow/art/marker_stem.dds"
+local GPS = LibGPS3 or LibGPS2
 
 local function CreateMarkerPart(parent)
   local control = WINDOW_MANAGER:CreateControl(nil, parent, CT_TEXTURE)
@@ -56,6 +57,17 @@ end
 function L3DA:UpdateMarker(parent, data, pData)
   local heading = GetPlayerCameraHeading and GetPlayerCameraHeading() or 0
   parent.marker:Set3DRenderSpaceOrientation(0, heading, 0)
+
+  if GPS and GPS.GlobalToWorld then
+    local worldX, worldY, worldZ = GPS:GlobalToWorld(data.targetX, data.targetY)
+    if worldX and worldY and worldZ then
+      local renderX, renderY, renderZ = WorldPositionToGuiRender3DPosition(worldX, worldY, worldZ)
+      if renderX and renderY and renderZ then
+        parent.marker:Set3DRenderSpaceOrigin(renderX, renderY, renderZ)
+        return
+      end
+    end
+  end
 
   local circ = math.atan2(pData.playerY - data.targetY, data.targetX - pData.playerX) + (90 * math.pi / 180)
   parent.marker:Set3DRenderSpaceOrigin(
