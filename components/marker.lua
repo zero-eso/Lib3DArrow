@@ -30,10 +30,10 @@ function L3DA:RefreshMarkerAppearance(parent, data)
   data.markerIconTexture = data.markerIconTexture or data.markerStemTexture
   data.markerStemWidth = data.markerStemWidth or 2.45
   data.markerStemHeight = data.markerStemHeight or 4.5
-  data.markerStemOffsetY = data.markerStemOffsetY or 2.25
+  data.markerStemOffsetY = data.markerStemOffsetY or 2.0
   data.markerIconWidth = data.markerIconWidth or 2.2
   data.markerIconHeight = data.markerIconHeight or 2.2
-  data.markerIconOffsetY = data.markerIconOffsetY or 5.8
+  data.markerIconOffsetY = data.markerIconOffsetY or 5.6
   data.markerAlpha = data.markerAlpha or 1
 
   local colour = GetMarkerColour(data)
