@@ -27,12 +27,12 @@ function L3DA:RefreshMarkerAppearance(parent, data)
   data.markerScale = data.markerScale or 1
   data.markerStemTexture = data.markerStemTexture or DEFAULT_STEM_TEXTURE
   data.markerIconTexture = data.markerIconTexture or data.markerStemTexture
-  data.markerStemWidth = data.markerStemWidth or 2.8
-  data.markerStemHeight = data.markerStemHeight or 6.8
-  data.markerStemOffsetY = data.markerStemOffsetY or 3.4
-  data.markerIconWidth = data.markerIconWidth or 2.5
-  data.markerIconHeight = data.markerIconHeight or 2.5
-  data.markerIconOffsetY = data.markerIconOffsetY or 7.5
+  data.markerStemWidth = data.markerStemWidth or 2.45
+  data.markerStemHeight = data.markerStemHeight or 5.4
+  data.markerStemOffsetY = data.markerStemOffsetY or 2.7
+  data.markerIconWidth = data.markerIconWidth or 2.35
+  data.markerIconHeight = data.markerIconHeight or 2.35
+  data.markerIconOffsetY = data.markerIconOffsetY or 5.9
   data.markerAlpha = data.markerAlpha or 1
 
   local colour = GetMarkerColour(data)
@@ -41,7 +41,7 @@ function L3DA:RefreshMarkerAppearance(parent, data)
   local stem = parent.marker.stem
   stem:SetTexture(data.markerStemTexture)
   stem:SetColor(colour.r, colour.g, colour.b, alpha)
-  stem:SetAlpha(0.55 * data.markerAlpha)
+  stem:SetAlpha(0.6 * data.markerAlpha)
   stem:Set3DLocalDimensions(GetScaledValue(data, data.markerStemWidth), GetScaledValue(data, data.markerStemHeight))
   stem:Set3DRenderSpaceOrigin(0, GetScaledValue(data, data.markerStemOffsetY), 0)
 
