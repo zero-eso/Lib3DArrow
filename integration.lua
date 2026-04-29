@@ -37,14 +37,14 @@ local SOURCE_MARKER_TEXTURES = {
 
 local DEFAULT_MARKER_LAYOUT = {
   stemHidden = false,
-  stemWidth = 2.45,
-  stemHeight = 4.5,
-  stemOffsetY = 2.0,
+  stemWidth = 1.84,
+  stemHeight = 3.38,
+  stemOffsetY = 1.5,
   stemAlphaScale = 0.6,
   iconHidden = false,
-  iconWidth = 2.2,
-  iconHeight = 2.2,
-  iconOffsetY = 5.6,
+  iconWidth = 1.65,
+  iconHeight = 1.65,
+  iconOffsetY = 4.2,
   iconAlphaScale = 1,
 }
 
@@ -55,9 +55,9 @@ local INTERIOR_ACTIVE_QUEST_MARKER_LAYOUT = {
   stemOffsetY = 0,
   stemAlphaScale = 0,
   iconHidden = false,
-  iconWidth = 1.85,
-  iconHeight = 1.85,
-  iconOffsetY = 1.85,
+  iconWidth = 1.39,
+  iconHeight = 1.39,
+  iconOffsetY = 1.39,
   iconAlphaScale = 1,
 }
 
