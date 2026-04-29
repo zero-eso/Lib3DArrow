@@ -11,6 +11,8 @@ local SOURCE_DESTINATION = "destination"
 local SOURCE_SKYSHARDS = "skyshards"
 local SOURCE_LOREBOOKS = "lorebooks"
 local SOURCE_ACTIVE_QUEST = "activequest"
+local QUEST_RETRY_WINDOW_MS = 5000
+local QUEST_BOOTSTRAP_RETRY_WINDOW_MS = 12000
 
 local SKYSHARDS_PINDATA_LOCX = 1
 local SKYSHARDS_PINDATA_LOCY = 2
@@ -301,7 +303,10 @@ local function ScheduleQuestRetry(questState, retryWindowMS)
     return
   end
 
-  questState.retryUntilMS = GetFrameTimeMilliseconds() + (retryWindowMS or 1500)
+  local newRetryUntilMS = GetFrameTimeMilliseconds() + (retryWindowMS or QUEST_RETRY_WINDOW_MS)
+  if not questState.retryUntilMS or newRetryUntilMS > questState.retryUntilMS then
+    questState.retryUntilMS = newRetryUntilMS
+  end
 end
 
 local function ShouldRetryQuestRefresh(questState)
@@ -463,6 +468,7 @@ end
 local function RefreshQuestTargetCache(playerX, playerY)
   local questState = GetQuestTrackerState()
   local currentMapId = GetCurrentMapId()
+  local previousCandidate = questState.candidate
 
   if not questState.questIndex or not IsValidQuestIndex(questState.questIndex) then
     questState.questIndex = FindTrackedQuestIndex()
@@ -472,24 +478,26 @@ local function RefreshQuestTargetCache(playerX, playerY)
   ClearQuestRetry(questState)
 
   if not currentMapId or currentMapId == 0 then
-    questState.candidate = nil
+    questState.candidate = previousCandidate
     questState.dirty = false
+    ScheduleQuestRetry(questState)
     return
   end
 
   if not questState.questIndex or not IsValidQuestIndex(questState.questIndex) then
-    questState.candidate = nil
+    questState.candidate = previousCandidate
     questState.dirty = false
+    ScheduleQuestRetry(questState, QUEST_BOOTSTRAP_RETRY_WINDOW_MS)
     return
   end
 
   if not GPS or not GPS.GlobalToLocal then
-    questState.candidate = nil
+    questState.candidate = previousCandidate
     questState.dirty = false
+    ScheduleQuestRetry(questState)
     return
   end
 
-  local previousCandidate = questState.candidate
   local hasStoredMap = PushCurrentMapContext()
   local mapResult = SetMapToQuestTarget(questState.questIndex)
   local globalTargets = {}
@@ -885,6 +893,7 @@ local function RefreshQuestTrackingState()
   questState.questIndex = FindTrackedQuestIndex()
   questState.dirty = true
   ClearQuestRetry(questState)
+  ScheduleQuestRetry(questState, QUEST_BOOTSTRAP_RETRY_WINDOW_MS)
 
   if integration.savedVars then
     integration:RefreshTarget()

@@ -1,6 +1,6 @@
 L3DA = L3DA or {}
 
-local DEFAULT_STEM_TEXTURE = "Lib3DArrow/art/pillar.dds"
+local DEFAULT_STEM_TEXTURE = "Lib3DArrow/art/marker_stem.dds"
 
 local function CreateMarkerPart(parent)
   local control = WINDOW_MANAGER:CreateControl(nil, parent, CT_TEXTURE)
@@ -27,12 +27,12 @@ function L3DA:RefreshMarkerAppearance(parent, data)
   data.markerScale = data.markerScale or 1
   data.markerStemTexture = data.markerStemTexture or DEFAULT_STEM_TEXTURE
   data.markerIconTexture = data.markerIconTexture or data.markerStemTexture
-  data.markerStemWidth = data.markerStemWidth or 0.6
-  data.markerStemHeight = data.markerStemHeight or 8
-  data.markerStemOffsetY = data.markerStemOffsetY or 2
-  data.markerIconWidth = data.markerIconWidth or 3
-  data.markerIconHeight = data.markerIconHeight or 3
-  data.markerIconOffsetY = data.markerIconOffsetY or 5.5
+  data.markerStemWidth = data.markerStemWidth or 2.8
+  data.markerStemHeight = data.markerStemHeight or 6.8
+  data.markerStemOffsetY = data.markerStemOffsetY or 3.4
+  data.markerIconWidth = data.markerIconWidth or 2.5
+  data.markerIconHeight = data.markerIconHeight or 2.5
+  data.markerIconOffsetY = data.markerIconOffsetY or 7.5
 
   local colour = GetMarkerColour(data)
   local alpha = colour.a or 1
@@ -40,7 +40,7 @@ function L3DA:RefreshMarkerAppearance(parent, data)
   local stem = parent.marker.stem
   stem:SetTexture(data.markerStemTexture)
   stem:SetColor(colour.r, colour.g, colour.b, alpha)
-  stem:SetAlpha(alpha * 0.3)
+  stem:SetAlpha(alpha * 0.55)
   stem:Set3DLocalDimensions(GetScaledValue(data, data.markerStemWidth), GetScaledValue(data, data.markerStemHeight))
   stem:Set3DRenderSpaceOrigin(0, GetScaledValue(data, data.markerStemOffsetY), 0)
 
