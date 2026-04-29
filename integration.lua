@@ -125,6 +125,8 @@ local function GetQuestTrackerState()
     candidate = nil,
     dirty = true,
     retryUntilMS = nil,
+    breadcrumbQuestIndex = nil,
+    breadcrumbMapId = nil,
   }
 
   return integration.questTrackerState
@@ -182,8 +184,19 @@ local function IsDestinationAvailable()
   return type(GetMapPlayerWaypoint) == "function"
 end
 
+local function GetQuestBreadcrumbs()
+  local breadcrumbs = WORLD_MAP_QUEST_BREADCRUMBS
+  if breadcrumbs
+    and type(breadcrumbs.GetSteps) == "function"
+    and type(breadcrumbs.RefreshQuest) == "function"
+  then
+    return breadcrumbs
+  end
+end
+
 local function IsActiveQuestAvailable()
-  return FOCUSED_QUEST_TRACKER ~= nil and type(ZO_WorldMap_GetPinManager) == "function"
+  return FOCUSED_QUEST_TRACKER ~= nil
+    and (GetQuestBreadcrumbs() ~= nil or type(ZO_WorldMap_GetPinManager) == "function")
 end
 
 local function IsLoreBooksAvailable()
@@ -455,6 +468,8 @@ local function MarkQuestTargetDirty(questIndex)
   if questIndex ~= nil then
     questState.questIndex = questIndex
   end
+  questState.breadcrumbQuestIndex = nil
+  questState.breadcrumbMapId = nil
   questState.dirty = true
   ClearQuestRetry(questState)
 end
@@ -593,6 +608,70 @@ local function CollectQuestPinGlobals(questIndex)
   return targets, #pins > 0
 end
 
+local function GetQuestBreadcrumbLocalPosition(positionData)
+  if not positionData then
+    return nil
+  end
+
+  local x = positionData.xLoc
+  local y = positionData.yLoc
+  if IsLocalPositionOnCurrentMap(x, y) then
+    return x, y
+  end
+
+  local symbolicX = positionData.additionalSymbolicLocX
+  local symbolicY = positionData.additionalSymbolicLocY
+  if IsLocalPositionOnCurrentMap(symbolicX, symbolicY) then
+    return symbolicX, symbolicY
+  end
+end
+
+local function CollectQuestBreadcrumbTargets(questIndex)
+  local breadcrumbs = GetQuestBreadcrumbs()
+  if not breadcrumbs then
+    return nil, false, false
+  end
+
+  local steps = breadcrumbs:GetSteps(questIndex)
+  local hasPending = false
+
+  if breadcrumbs.DoesQuestHavePendingTasks then
+    hasPending = breadcrumbs:DoesQuestHavePendingTasks(questIndex)
+  elseif breadcrumbs.HasOutstandingRequests then
+    hasPending = breadcrumbs:HasOutstandingRequests()
+  end
+
+  local targets = {}
+  local hasPositions = false
+  local numSteps = GetJournalQuestNumSteps(questIndex) or 0
+
+  for stepIndex = QUEST_MAIN_STEP_INDEX, numSteps do
+    local stepPositions = steps and steps[stepIndex]
+    if stepPositions then
+      local numConditions = GetJournalQuestNumConditions(questIndex, stepIndex) or 0
+      for conditionIndex = 1, numConditions do
+        local positionData = stepPositions[conditionIndex]
+        if positionData then
+          hasPositions = true
+          if positionData.insideCurrentMapWorld then
+            local x, y = GetQuestBreadcrumbLocalPosition(positionData)
+            if x and y then
+              targets[#targets + 1] = {
+                x = x,
+                y = y,
+                stepIndex = stepIndex,
+                conditionIndex = conditionIndex,
+              }
+            end
+          end
+        end
+      end
+    end
+  end
+
+  return targets, hasPositions, hasPending
+end
+
 local function RefreshQuestTargetCache(playerX, playerY)
   local questState = GetQuestTrackerState()
   local currentMapId = GetCurrentMapId()
@@ -626,6 +705,57 @@ local function RefreshQuestTargetCache(playerX, playerY)
     questState.dirty = false
     ScheduleQuestRetry(questState)
     return
+  end
+
+  local breadcrumbs = GetQuestBreadcrumbs()
+  if breadcrumbs then
+    local shouldRefreshBreadcrumbs = questState.breadcrumbQuestIndex ~= questState.questIndex
+      or questState.breadcrumbMapId ~= currentMapId
+
+    if shouldRefreshBreadcrumbs then
+      breadcrumbs:RefreshQuest(questState.questIndex)
+      questState.breadcrumbQuestIndex = questState.questIndex
+      questState.breadcrumbMapId = currentMapId
+    end
+
+    local breadcrumbTargets, hasBreadcrumbPositions, hasBreadcrumbPending = CollectQuestBreadcrumbTargets(questState.questIndex)
+    if breadcrumbTargets and #breadcrumbTargets > 0 then
+      local bestTarget = nil
+      local bestDistance = nil
+
+      for _, target in ipairs(breadcrumbTargets) do
+        local distance = GetLocalDistanceScore(playerX, playerY, target.x, target.y)
+        if not bestDistance or distance < bestDistance then
+          bestTarget = target
+          bestDistance = distance
+        end
+      end
+
+      if bestTarget then
+        questState.candidate = {
+          source = SOURCE_ACTIVE_QUEST,
+          x = bestTarget.x,
+          y = bestTarget.y,
+          distance = bestDistance or 0,
+          key = string.format("%d:%d:%d:%d:%.5f:%.5f", currentMapId, questState.questIndex, bestTarget.stepIndex, bestTarget.conditionIndex, bestTarget.x, bestTarget.y),
+        }
+        questState.dirty = false
+        return
+      end
+    end
+
+    if hasBreadcrumbPending then
+      questState.candidate = mapChanged and nil or previousCandidate
+      questState.dirty = false
+      ScheduleQuestRetry(questState, mapChanged and QUEST_BOOTSTRAP_RETRY_WINDOW_MS or QUEST_RETRY_WINDOW_MS)
+      return
+    end
+
+    if hasBreadcrumbPositions then
+      questState.candidate = nil
+      questState.dirty = false
+      return
+    end
   end
 
   local hasStoredMap = PushCurrentMapContext()
@@ -696,6 +826,8 @@ local function FindActiveQuestCandidate(playerX, playerY)
 
   if focusedQuestIndex ~= questState.questIndex then
     questState.questIndex = focusedQuestIndex
+    questState.breadcrumbQuestIndex = nil
+    questState.breadcrumbMapId = nil
     questState.dirty = true
     ClearQuestRetry(questState)
   end
@@ -1031,6 +1163,8 @@ end
 local function RefreshQuestTrackingState()
   local questState = GetQuestTrackerState()
   questState.questIndex = FindTrackedQuestIndex()
+  questState.breadcrumbQuestIndex = nil
+  questState.breadcrumbMapId = nil
   questState.dirty = true
   ClearQuestRetry(questState)
   ScheduleQuestRetry(questState, QUEST_BOOTSTRAP_RETRY_WINDOW_MS)
