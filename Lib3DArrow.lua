@@ -119,6 +119,12 @@ local function GetPlayerData()
   pData.worldX, pData.worldY, pData.worldZ = WorldPositionToGuiRender3DPosition(pData.worldX, pData.worldY, pData.worldZ)
   if not pData.worldX then return false end
 
+  -- raw world position is used by the ground marker path, which matches HarvestMap's world-pin placement.
+  _, pData.rawWorldX, pData.rawWorldY, pData.rawWorldZ = GetUnitRawWorldPosition("player")
+  pData.rawWorldX = pData.rawWorldX / 100
+  pData.rawWorldY = pData.rawWorldY / 100
+  pData.rawWorldZ = pData.rawWorldZ / 100
+
   -- player map position
   pData.playerX, pData.playerY = LocalToGlobal(GetMapPlayerPosition("player"))
 

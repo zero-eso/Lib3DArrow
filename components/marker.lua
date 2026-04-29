@@ -59,21 +59,18 @@ function L3DA:UpdateMarker(parent, data, pData)
   parent.marker:Set3DRenderSpaceOrientation(0, heading, 0)
 
   if GPS and GPS.GlobalToWorld then
-    local worldX, worldY, worldZ = GPS:GlobalToWorld(data.targetX, data.targetY)
-    if worldX and worldY and worldZ then
-      local renderX, renderY, renderZ = WorldPositionToGuiRender3DPosition(worldX, worldY, worldZ)
-      if renderX and renderY and renderZ then
-        parent.marker:Set3DRenderSpaceOrigin(renderX, renderY, renderZ)
-        return
-      end
+    local worldX, worldHeight, worldY = GPS:GlobalToWorld(data.targetX, data.targetY)
+    if worldX and worldHeight and worldY then
+      parent.marker:Set3DRenderSpaceOrigin(worldX / 100, worldHeight / 100, worldY / 100)
+      return
     end
   end
 
   local circ = math.atan2(pData.playerY - data.targetY, data.targetX - pData.playerX) + (90 * math.pi / 180)
   parent.marker:Set3DRenderSpaceOrigin(
-    pData.worldX + (data.metres * math.sin(circ)),
-    pData.worldY,
-    pData.worldZ + (data.metres * math.cos(circ))
+    pData.rawWorldX + (data.metres * math.sin(circ)),
+    pData.rawWorldY,
+    pData.rawWorldZ + (data.metres * math.cos(circ))
   )
 end
 
