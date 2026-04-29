@@ -304,7 +304,21 @@ local function BuildCandidate(source, x, y, distance, key)
   }
 end
 
+local function GetFocusedQuestIndex()
+  if QUEST_JOURNAL_MANAGER and QUEST_JOURNAL_MANAGER.GetFocusedQuestIndex then
+    local questIndex = QUEST_JOURNAL_MANAGER:GetFocusedQuestIndex()
+    if questIndex and questIndex > 0 and IsValidQuestIndex(questIndex) then
+      return questIndex
+    end
+  end
+end
+
 local function FindTrackedQuestIndex()
+  local focusedQuestIndex = GetFocusedQuestIndex()
+  if focusedQuestIndex then
+    return focusedQuestIndex
+  end
+
   for questIndex = 1, MAX_JOURNAL_QUESTS do
     if IsValidQuestIndex(questIndex) then
       local _, _, _, _, _, _, tracked = GetJournalQuestInfo(questIndex)
@@ -581,6 +595,14 @@ local function FindActiveQuestCandidate(playerX, playerY)
 
   local questState = GetQuestTrackerState()
   local currentMapId = GetCurrentMapId()
+  local focusedQuestIndex = FindTrackedQuestIndex()
+
+  if focusedQuestIndex ~= questState.questIndex then
+    questState.questIndex = focusedQuestIndex
+    questState.dirty = true
+    ClearQuestRetry(questState)
+  end
+
   if questState.currentMapId ~= currentMapId then
     questState.dirty = true
   end
@@ -922,9 +944,11 @@ local function RefreshQuestTrackingState()
 end
 
 local function OnQuestAssistStateChanged(_, assistedData)
-  local questIndex = assistedData and assistedData.arg1 or FindTrackedQuestIndex()
+  local questIndex = GetFocusedQuestIndex() or (assistedData and assistedData.arg1) or FindTrackedQuestIndex()
   MarkQuestTargetDirty(questIndex)
-  integration:RefreshTarget()
+  zo_callLater(function()
+    RefreshQuestTrackingState()
+  end, 50)
 end
 
 local function OnQuestTargetChanged()
@@ -1270,6 +1294,9 @@ end
 
 local function OnPlayerActivated()
   RefreshQuestTrackingState()
+  zo_callLater(function()
+    RefreshQuestTrackingState()
+  end, 150)
   integration:RefreshTarget()
 end
 
